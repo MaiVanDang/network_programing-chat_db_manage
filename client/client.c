@@ -1,3 +1,4 @@
+#include "../common/protocol.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -6,31 +7,54 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <signal.h>
+#include <fcntl.h>
 
 #define BUFFER_SIZE 4096
-#define DELIMITER "\r\n"
+#define INITIAL_BUFFER_SIZE 64
+#define BUFFER_GROW_SIZE 32
 
+// Global variable for signal handling
 int g_socket_fd = -1;
 
 typedef struct {
-    int socket_fd;
-    char buffer[BUFFER_SIZE];
-    size_t buffer_len;
+    int sockfd;
+    StreamBuffer *recv_buffer;
     int connected;
-} Client;
+} ClientConn;
 
-Client* client_create();
-void client_destroy(Client *client);
-int client_connect(Client *client, const char *host, int port);
-void client_disconnect(Client *client);
-int client_send(Client *client, const char *message);
-char* client_receive(Client *client);
-void client_run(Client *client);
-void print_help();
+ClientConn global_client;
+
+// Function prototypes
+char* read_line();
+void send_message(ClientConn *client, const char *message);
+int handle_server_response(ClientConn *client);
+int check_server_messages(ClientConn *client);
+void print_main_menu();
+void print_auth_menu();
+void print_friend_menu();
+void print_group_menu();
+
+// Handlers
+int handle_register(ClientConn *client);
+int handle_login(ClientConn *client);
+int handle_logout(ClientConn *client);
+void handle_friend_req(ClientConn *client);
+void handle_friend_accept(ClientConn *client);
+void handle_friend_decline(ClientConn *client);
+void handle_friend_remove(ClientConn *client);
+void handle_friend_list(ClientConn *client);
+void handle_send_message(ClientConn *client);
+void handle_group_create(ClientConn *client);
+void handle_group_invite(ClientConn *client);
+void handle_group_join(ClientConn *client);
+void handle_group_leave(ClientConn *client);
+void handle_group_kick(ClientConn *client);
+void handle_group_msg(ClientConn *client);
+
 void signal_handler(int signum);
 
 // ============================================================================
-// Signal Handler
+// Utility Functions
 // ============================================================================
 
 void signal_handler(int signum) {
@@ -42,295 +66,479 @@ void signal_handler(int signum) {
     exit(0);
 }
 
-// ============================================================================
-// Client Functions
-// ============================================================================
-
-Client* client_create() {
-    Client *client = (Client*)malloc(sizeof(Client));
-    if (!client) {
-        perror("Failed to allocate client");
+char* read_line() {
+    size_t capacity = INITIAL_BUFFER_SIZE;
+    size_t length = 0;
+    char* buffer = malloc(capacity);
+    
+    if (!buffer) {
+        printf("Memory allocation failed.\n");
         return NULL;
     }
     
-    memset(client, 0, sizeof(Client));
-    client->socket_fd = -1;
-    client->connected = 0;
+    int c;
+    while ((c = getchar()) != '\n' && c != EOF) {
+        if (length >= capacity - 1) {
+            capacity += BUFFER_GROW_SIZE;
+            char* newBuffer = realloc(buffer, capacity);
+            if (!newBuffer) {
+                free(buffer);
+                printf("Memory reallocation failed.\n");
+                return NULL;
+            }
+            buffer = newBuffer;
+        }
+        buffer[length++] = c;
+    }
     
-    return client;
+    buffer[length] = '\0';
+    
+    if (length == 0) {
+        free(buffer);
+        return NULL;
+    }
+    
+    char* finalBuffer = realloc(buffer, length + 1);
+    if (finalBuffer) {
+        return finalBuffer;
+    }
+    
+    return buffer;
 }
 
-void client_destroy(Client *client) {
-    if (!client) return;
-    
-    if (client->connected) {
-        client_disconnect(client);
-    }
-    
-    free(client);
+void send_message(ClientConn *client, const char *message) {
+    char buff[BUFFER_SIZE];
+    snprintf(buff, BUFFER_SIZE, "%s%s", message, PROTOCOL_DELIMITER);
+    send(client->sockfd, buff, strlen(buff), 0);
 }
 
-int client_connect(Client *client, const char *host, int port) {
-    if (!client) return 0;
-    
-    printf("Connecting to %s:%d...\n", host, port);
-    
-    client->socket_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (client->socket_fd < 0) {
-        perror("Socket creation failed");
-        return 0;
-    }
-    
-    g_socket_fd = client->socket_fd;
-    
-    struct sockaddr_in server_addr;
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(port);
-    
-    if (inet_pton(AF_INET, host, &server_addr.sin_addr) <= 0) {
-        perror("Invalid address");
-        close(client->socket_fd);
-        client->socket_fd = -1;
-        return 0;
-    }
-    
-    if (connect(client->socket_fd, (struct sockaddr*)&server_addr, 
-                sizeof(server_addr)) < 0) {
-        perror("Connection failed");
-        close(client->socket_fd);
-        client->socket_fd = -1;
-        return 0;
-    }
-    
-    client->connected = 1;
-    printf("Connected successfully!\n\n");
-    
-    char *welcome = client_receive(client);
-    if (welcome) {
-        printf("Server: %s\n\n", welcome);
-        free(welcome);
-    }
-    
-    return 1;
-}
-
-void client_disconnect(Client *client) {
-    if (!client || !client->connected) return;
-    
-    if (client->socket_fd >= 0) {
-        close(client->socket_fd);
-        client->socket_fd = -1;
-        g_socket_fd = -1;
-    }
-    
-    client->connected = 0;
-    printf("\nDisconnected from server\n");
-}
-
-int client_send(Client *client, const char *message) {
-    if (!client || !client->connected || !message) return 0;
+int handle_server_response(ClientConn *client) {
+    if (!client || !client->connected) return 0;
     
     char buffer[BUFFER_SIZE];
-    snprintf(buffer, sizeof(buffer), "%s%s", message, DELIMITER);
+    int bytes_received = recv(client->sockfd, buffer, sizeof(buffer) - 1, 0);
     
-    int len = strlen(buffer);
-    int sent = send(client->socket_fd, buffer, len, 0);
-    
-    if (sent < 0) {
-        perror("Send failed");
+    if (bytes_received <= 0) {
+        if (bytes_received == 0) {
+            printf("Server disconnected!\n");
+        } else {
+            perror("Recv error");
+        }
+        client->connected = 0;
         return 0;
     }
     
-    return 1;
+    buffer[bytes_received] = '\0';
+    
+    if (!stream_buffer_append(client->recv_buffer, buffer, bytes_received)) {
+        fprintf(stderr, "Buffer overflow in client\n");
+        return -1;
+    }
+    
+    char *message;
+    int messages_processed = 0;
+    while ((message = stream_buffer_extract_message(client->recv_buffer)) != NULL) {
+        printf("[Server] %s\n", message);
+        free(message);
+        messages_processed++;
+    }
+    
+    return messages_processed > 0 ? 1 : 0;
 }
 
-char* client_receive(Client *client) {
-    if (!client || !client->connected) return NULL;
+int check_server_messages(ClientConn *client) {
+    if (!client || !client->connected) return 0;
     
-    char temp[BUFFER_SIZE];
-    int received = recv(client->socket_fd, temp, sizeof(temp) - 1, 0);
+    int flags = fcntl(client->sockfd, F_GETFL, 0);
+    fcntl(client->sockfd, F_SETFL, flags | O_NONBLOCK);
     
-    if (received <= 0) {
-        if (received == 0) {
-            printf("\nServer closed connection\n");
+    char buffer[BUFFER_SIZE];
+    int bytes_received = recv(client->sockfd, buffer, sizeof(buffer) - 1, 0);
+    
+    fcntl(client->sockfd, F_SETFL, flags);
+    
+    if (bytes_received <= 0) {
+        if (bytes_received == 0) {
+            printf("Server disconnected!\n");
+            client->connected = 0;
+            return -1;
+        } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            return 0;
         } else {
-            perror("Receive failed");
+            perror("Recv error");
+            client->connected = 0;
+            return -1;
         }
-        client->connected = 0;
-        return NULL;
     }
     
-    temp[received] = '\0';
+    buffer[bytes_received] = '\0';
     
-    if (client->buffer_len + received >= BUFFER_SIZE) {
-        fprintf(stderr, "Buffer overflow\n");
-        return NULL;
+    if (!stream_buffer_append(client->recv_buffer, buffer, bytes_received)) {
+        fprintf(stderr, "Buffer overflow in client\n");
+        return -1;
     }
     
-    memcpy(client->buffer + client->buffer_len, temp, received);
-    client->buffer_len += received;
-    client->buffer[client->buffer_len] = '\0';
-    
-    char *delim = strstr(client->buffer, DELIMITER);
-    if (!delim) {
-        return NULL; 
+    char *message;
+    int messages_processed = 0;
+    while ((message = stream_buffer_extract_message(client->recv_buffer)) != NULL) {
+        printf("[Server] %s\n", message);
+        free(message);
+        messages_processed++;
     }
     
-    size_t msg_len = delim - client->buffer;
-    char *message = (char*)malloc(msg_len + 1);
-    if (!message) {
-        perror("Memory allocation failed");
-        return NULL;
-    }
-    
-    memcpy(message, client->buffer, msg_len);
-    message[msg_len] = '\0';
-    
-    size_t remaining = client->buffer_len - msg_len - strlen(DELIMITER);
-    memmove(client->buffer, delim + strlen(DELIMITER), remaining);
-    client->buffer_len = remaining;
-    client->buffer[client->buffer_len] = '\0';
-    
-    return message;
+    return messages_processed;
 }
 
 // ============================================================================
-// UI Functions
+// Menu Display Functions
 // ============================================================================
 
-void print_help() {
-    printf("\n=== AVAILABLE COMMANDS ===\n\n");
-    
-    printf("Authentication:\n");
-    printf("  REGISTER <username> <password>  - Register new account\n");
-    printf("  LOGIN <username> <password>     - Login to account\n");
-    printf("  LOGOUT                          - Logout from account\n\n");
-    
-    printf("Friend Management:\n");
-    printf("  FRIEND_REQ <username>           - Send friend request\n");
-    printf("  FRIEND_ACCEPT <username>        - Accept friend request\n");
-    printf("  FRIEND_DECLINE <username>       - Decline friend request\n");
-    printf("  FRIEND_REMOVE <username>        - Remove friend\n");
-    printf("  FRIEND_LIST                     - List all friends\n\n");
-    
-    printf("Messaging:\n");
-    printf("  MSG <username> <message>        - Send private message\n\n");
-    
-    printf("Group Chat:\n");
-    printf("  GROUP_CREATE <groupname>        - Create new group\n");
-    printf("  GROUP_INVITE <groupid> <user>   - Invite user to group\n");
-    printf("  GROUP_JOIN <groupid>            - Join group\n");
-    printf("  GROUP_LEAVE <groupid>           - Leave group\n");
-    printf("  GROUP_KICK <groupid> <user>     - Kick user from group\n");
-    printf("  GROUP_MSG <groupid> <message>   - Send group message\n\n");
-    
-    printf("Client Commands:\n");
-    printf("  help                            - Show this help\n");
-    printf("  quit                            - Exit client\n");
+void print_main_menu() {
     printf("\n");
+    printf("========================================\n");
+    printf("           CHAT CLIENT MENU             \n");
+    printf("========================================\n");
+    printf("1. Authentication\n");
+    printf("2. Friend Management\n");
+    printf("3. Send Message\n");
+    printf("4. Group Chat\n");
+    printf("5. Exit\n");
+    printf("========================================\n");
+    printf("Your choice: ");
+}
+
+void print_auth_menu() {
+    printf("\n");
+    printf("=== AUTHENTICATION ===\n");
+    printf("1. Register\n");
+    printf("2. Login\n");
+    printf("3. Logout\n");
+    printf("4. Back to main menu\n");
+    printf("======================\n");
+    printf("Your choice: ");
+}
+
+void print_friend_menu() {
+    printf("\n");
+    printf("=== FRIEND MANAGEMENT ===\n");
+    printf("1. Send friend request\n");
+    printf("2. Accept friend request\n");
+    printf("3. Decline friend request\n");
+    printf("4. Remove friend\n");
+    printf("5. List friends\n");
+    printf("6. Back to main menu\n");
+    printf("=========================\n");
+    printf("Your choice: ");
+}
+
+void print_group_menu() {
+    printf("\n");
+    printf("=== GROUP CHAT ===\n");
+    printf("1. Create group\n");
+    printf("2. Invite to group\n");
+    printf("3. Join group\n");
+    printf("4. Leave group\n");
+    printf("5. Kick from group\n");
+    printf("6. Send group message\n");
+    printf("7. Back to main menu\n");
+    printf("==================\n");
+    printf("Your choice: ");
+}
+
+// ============================================================================
+// Authentication Handlers
+// ============================================================================
+
+int handle_register(ClientConn *client) {
+    printf("\n--- REGISTER ---\n");
+    printf("Enter username: ");
+    char *username = read_line();
+    if (!username || strlen(username) == 0) {
+        printf("Username cannot be empty!\n");
+        if (username) free(username);
+        return 1;
+    }
+    
+    printf("Enter password: ");
+    char *password = read_line();
+    if (!password || strlen(password) == 0) {
+        printf("Password cannot be empty!\n");
+        free(username);
+        if (password) free(password);
+        return 1;
+    }
+    
+    char message[BUFFER_SIZE];
+    snprintf(message, BUFFER_SIZE, "REGISTER %s %s", username, password);
+    send_message(client, message);
+    
+    int result = handle_server_response(client);
+    free(username);
+    free(password);
+    return result;
+}
+
+int handle_login(ClientConn *client) {
+    printf("\n--- LOGIN ---\n");
+    printf("Enter username: ");
+    char *username = read_line();
+    if (!username || strlen(username) == 0) {
+        printf("Username cannot be empty!\n");
+        if (username) free(username);
+        return 1;
+    }
+    
+    printf("Enter password: ");
+    char *password = read_line();
+    if (!password || strlen(password) == 0) {
+        printf("Password cannot be empty!\n");
+        free(username);
+        if (password) free(password);
+        return 1;
+    }
+    
+    char message[BUFFER_SIZE];
+    snprintf(message, BUFFER_SIZE, "LOGIN %s %s", username, password);
+    send_message(client, message);
+    
+    int result = handle_server_response(client);
+    free(username);
+    free(password);
+    return result;
+}
+
+int handle_logout(ClientConn *client) {
+    printf("\n--- LOGOUT ---\n");
+    send_message(client, "LOGOUT");
+    return handle_server_response(client);
+}
+
+// ============================================================================
+// Friend Management Handlers
+// ============================================================================
+
+void handle_friend_req(ClientConn *client) {
+    /**
+    TO-DO 
+    */
+}
+
+void handle_friend_accept(ClientConn *client) {
+    /**
+    TO-DO 
+    */
+}
+
+void handle_friend_decline(ClientConn *client) {
+    /**
+    TO-DO 
+    */
+}
+
+void handle_friend_remove(ClientConn *client) {
+    /**
+    TO-DO 
+    */
+}
+
+void handle_friend_list(ClientConn *client) {
+    /**
+    TO-DO 
+    */
+}
+
+// ============================================================================
+// Messaging Handler
+// ============================================================================
+
+void handle_send_message(ClientConn *client) {
+    /**
+    TO-DO 
+    */
+}
+
+// ============================================================================
+// Group Chat Handlers
+// ============================================================================
+
+void handle_group_create(ClientConn *client) {
+    /**
+    TO-DO 
+    */
+}
+
+void handle_group_invite(ClientConn *client) {
+    /**
+    TO-DO 
+    */
+}
+
+void handle_group_join(ClientConn *client) {
+    /**
+    TO-DO 
+    */
+}
+
+void handle_group_leave(ClientConn *client) {
+    /**
+    TO-DO 
+    */
+}
+
+void handle_group_kick(ClientConn *client) {
+    /**
+    TO-DO 
+    */
+}
+
+void handle_group_msg(ClientConn *client) {
+    /**
+    TO-DO 
+    */
 }
 
 // ============================================================================
 // Main Loop
 // ============================================================================
 
-void client_run(Client *client) {
-    if (!client || !client->connected) {
-        printf("Not connected to server\n");
-        return;
-    }
-    
-    printf("Type 'help' for available commands\n\n");
-    
-    char input[BUFFER_SIZE];
-    
-    while (client->connected) {
-        printf("> ");
-        fflush(stdout);
-        
-        if (!fgets(input, sizeof(input), stdin)) {
-            break;
-        }
-        
-        size_t len = strlen(input);
-        if (len > 0 && input[len - 1] == '\n') {
-            input[len - 1] = '\0';
-        }
-        
-        if (strlen(input) == 0) {
-            continue;
-        }
-        
-        if (strcmp(input, "quit") == 0 || strcmp(input, "exit") == 0) {
-            printf("Goodbye!\n");
-            break;
-        }
-        
-        if (strcmp(input, "help") == 0) {
-            print_help();
-            continue;
-        }
-        
-        if (!client_send(client, input)) {
-            printf("Failed to send message\n");
-            continue;
-        }
-        
-        char *response = client_receive(client);
-        if (response) {
-            printf("Server: %s\n", response);
-            free(response);
-        }
-        
-        if (!client->connected) {
-            printf("Connection lost\n");
-            break;
-        }
-    }
-}
-
-// ============================================================================
-// Main
-// ============================================================================
-
 int main(int argc, char *argv[]) {
-    char *host = "127.0.0.1";
-    int port = 8888;
-    
-    if (argc >= 2) {
-        host = argv[1];
+    if (argc != 3) {
+        printf("Usage: ./chat_client IP_Addr Port_Number\n");
+        return 1;
     }
-    if (argc >= 3) {
-        port = atoi(argv[2]);
-        if (port <= 0 || port > 65535) {
-            fprintf(stderr, "Invalid port number: %s\n", argv[2]);
-            return 1;
-        }
+    
+    char *server_addr_str = argv[1];
+    int server_port = atoi(argv[2]);
+
+    int client_sock;
+    struct sockaddr_in server_addr;
+
+    if ((client_sock = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+        perror("socket() error");
+        exit(1);
+    }
+
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(server_port);
+    
+    if (inet_pton(AF_INET, server_addr_str, &server_addr.sin_addr) <= 0) {
+        perror("inet_pton() error");
+        exit(1);
+    }
+    
+    if (connect(client_sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+        perror("connect() error");
+        exit(1);
+    }
+
+    printf("\n========================================\n");
+    printf("       Chat Client - Network Project\n");
+    printf("========================================\n");
+    printf("Connected to server %s:%d\n", server_addr_str, server_port);
+
+    global_client.sockfd = client_sock;
+    global_client.recv_buffer = stream_buffer_create();
+    global_client.connected = 1;
+    g_socket_fd = client_sock;
+    
+    if (!global_client.recv_buffer) {
+        fprintf(stderr, "Failed to create stream buffer\n");
+        close(client_sock);
+        return 1;
     }
     
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
     
-    printf("\n========================================\n");
-    printf("       Chat Client - Network Project\n");
-    printf("========================================\n\n");
-    
-    Client *client = client_create();
-    if (!client) {
-        fprintf(stderr, "Failed to create client\n");
+    printf("Waiting for welcome message...\n");
+    if (handle_server_response(&global_client) <= 0) {
+        fprintf(stderr, "Failed to receive welcome message\n");
+        stream_buffer_destroy(global_client.recv_buffer);
+        close(client_sock);
         return 1;
     }
-    
-    if (!client_connect(client, host, port)) {
-        client_destroy(client);
-        return 1;
+
+    while (global_client.connected) {
+        check_server_messages(&global_client);
+        
+        print_main_menu();
+        
+        int choice;
+        if (scanf("%d", &choice) != 1) {
+            while (getchar() != '\n');
+            printf("Invalid input!\n");
+            continue;
+        }
+        while (getchar() != '\n');
+
+        switch (choice) {
+            case 1: { // Authentication
+                int auth_continue = 1;
+                while (auth_continue && global_client.connected) {
+                    check_server_messages(&global_client);
+                    
+                    print_auth_menu();
+                    int auth_choice;
+                    if (scanf("%d", &auth_choice) != 1) {
+                        while (getchar() != '\n');
+                        printf("Invalid input!\n");
+                        continue;
+                    }
+                    while (getchar() != '\n');
+                    
+                    switch (auth_choice) {
+                        case 1: handle_register(&global_client); break;
+                        case 2: handle_login(&global_client); break;
+                        case 3: handle_logout(&global_client); break;
+                        case 4: auth_continue = 0; break;
+                        default: printf("Invalid choice!\n");
+                    }
+                }
+                break;
+            }
+            
+            case 2: { // Friend Management
+                /**
+			    TO-DO 
+			    */
+                break;
+            }
+            
+            case 3: // Send Message
+                /**
+			    TO-DO 
+			    */
+                break;
+        
+            case 4: { // Group Chat
+                /**
+			    TO-DO 
+			    */
+                break;
+            }
+            
+            case 5: // Exit
+                printf("Closing connection...\n");
+                if (global_client.recv_buffer) {
+                    stream_buffer_destroy(global_client.recv_buffer);
+                }
+                close(client_sock);
+                return 0;
+        
+            default:
+                printf("Invalid choice!\n");
+        }
+        
+        if (!global_client.connected) {
+            printf("Server disconnected. Exiting...\n");
+            break;
+        }
     }
-    
-    client_run(client);
-    
-    client_disconnect(client);
-    client_destroy(client);
-    
+
+    if (global_client.recv_buffer) {
+        stream_buffer_destroy(global_client.recv_buffer);
+    }
+    close(client_sock);
     return 0;
 }
