@@ -4,7 +4,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <libpq-fe.h>
-#include "protocol.h"
+#include "../common/protocol.h"
 
 #define MAX_CLIENTS 100
 #define PORT 8888

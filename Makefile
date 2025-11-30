@@ -3,33 +3,34 @@
 # ============================================================================
 
 CC = gcc
-CFLAGS = -Wall -Wextra -g
+CFLAGS = -Wall -Wextra -g -I. -Iserver -Icommon -Idatabase
 LDFLAGS = -lpq -lssl -lcrypto
 
 # PostgreSQL configuration
-PG_CFLAGS = $(shell pkg-config --cflags libpq)
-PG_LDFLAGS = $(shell pkg-config --libs libpq)
+# Try pkg-config first, fallback to standard Linux paths
+PG_CFLAGS = $(shell pkg-config --cflags libpq 2>/dev/null || echo "-I/usr/include/postgresql")
+PG_LDFLAGS = $(shell pkg-config --libs libpq 2>/dev/null || echo "-lpq")
 
 # OpenSSL configuration
-SSL_CFLAGS = $(shell pkg-config --cflags openssl)
-SSL_LDFLAGS = $(shell pkg-config --libs openssl)
+SSL_CFLAGS = $(shell pkg-config --cflags openssl 2>/dev/null || echo "")
+SSL_LDFLAGS = $(shell pkg-config --libs openssl 2>/dev/null || echo "-lssl -lcrypto")
 
 # Combine flags
 CFLAGS += $(PG_CFLAGS) $(SSL_CFLAGS)
 LDFLAGS = $(PG_LDFLAGS) $(SSL_LDFLAGS)
 
 # Source files
-SERVER_SOURCES = server_main.c server.c protocol.c auth.c database.c
+SERVER_SOURCES = server/server_main.c server/server.c common/protocol.c common/auth.c database/database.c
 SERVER_OBJECTS = $(SERVER_SOURCES:.c=.o)
 SERVER_TARGET = chat_server
 
-CLIENT_SOURCE = client.c
+CLIENT_SOURCE = client/client.c
 CLIENT_TARGET = chat_client
 
 DB_MAIN = main.c
-DB_SOURCES = database.c
+DB_SOURCES = database/database.c
 DB_OBJECTS = $(DB_MAIN:.c=.o) $(DB_SOURCES:.c=.o)
-DB_TARGET = db_manager
+DB_TARGET = database/db_manager
 
 # ============================================================================
 # Main Targets
@@ -145,7 +146,7 @@ show-all: db
 # Insert sample data
 sample-data:
 	@echo "Inserting sample data..."
-	psql -U rin -d network -f sample_data.sql
+	psql -U mquanvu -d network -f database/sample_data.sql
 	@echo "✓ Sample data inserted"
 
 # Reset database (drop + create + sample data)
@@ -161,12 +162,12 @@ reset-db: drop-tables create-tables sample-data
 # Run Python test suite
 test-python:
 	@echo "Running Python test suite..."
-	python3 test_client.py
+	python3 client/test_client.py
 
 # Run Python interactive test
 test-interactive:
 	@echo "Starting interactive test client..."
-	python3 test_client.py -i
+	python3 client/test_client.py -i
 
 # Basic netcat test
 test-basic:
