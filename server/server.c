@@ -3,9 +3,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+#else
 #include <unistd.h>
 #include <errno.h>
 #include <arpa/inet.h>
+#endif
 #include <time.h>
 
 // ============================================================================
@@ -75,7 +81,7 @@ Server* server_create(int port) {
         return NULL;
     }
     
-    printf("? Server created on port %d\n", port);
+    printf("Server created on port %d\n", port);
     return server;
 }
 
@@ -105,7 +111,7 @@ int server_start(Server *server) {
     if (!server) return 0;
     
     server->running = 1;
-    printf("? Server started and listening...\n");
+    printf("Server started and listening...\n");
     return 1;
 }
 
@@ -292,7 +298,7 @@ int server_add_client(Server *server, int socket_fd) {
                 server->max_fd = socket_fd;
             }
             
-            printf("? Client added: fd=%d, slot=%d\n", socket_fd, i);
+            printf("Client added: fd=%d, slot=%d\n", socket_fd, i);
             return 1;
         }
     }
@@ -322,7 +328,7 @@ void server_remove_client(Server *server, int socket_fd) {
             client_session_destroy(client);
             server->clients[i] = NULL;
             
-            printf("? Client removed: fd=%d, slot=%d\n", socket_fd, i);
+            printf("Client removed: fd=%d, slot=%d\n", socket_fd, i);
             return;
         }
     }

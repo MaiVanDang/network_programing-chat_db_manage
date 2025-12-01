@@ -43,7 +43,6 @@ int stream_buffer_append(StreamBuffer *buffer, const char *data, size_t len) {
 char* stream_buffer_extract_message(StreamBuffer *buffer) {
     if (!buffer || buffer->length == 0) return NULL;
     
-    // Find delimiter "\r\n"
     char *delim = strstr(buffer->data, PROTOCOL_DELIMITER);
     if (!delim) {
         return NULL;
@@ -120,7 +119,6 @@ ParsedCommand* parse_protocol_message(const char *raw_message) {
     switch (cmd->cmd_type) {
         case CMD_REGISTER:
         case CMD_LOGIN:
-            // REGISTER <username> <password>
             token = strtok(NULL, " ");
             if (token) {
                 strncpy(cmd->username, token, MAX_USERNAME_LENGTH - 1);
@@ -224,7 +222,7 @@ char* build_response(int status_code, const char *message) {
         snprintf(response, MAX_MESSAGE_LENGTH, "%d %s%s", 
                  status_code, message, PROTOCOL_DELIMITER);
     } else {
-        snprintf(response, MAX_MESSAGE_LENGTH, "%d OK%s", 
+        snprintf(response, MAX_MESSAGE_LENGTH, "%d %s", 
                  status_code, PROTOCOL_DELIMITER);
     }
     
@@ -245,7 +243,6 @@ int validate_username(const char *username) {
     size_t len = strlen(username);
     if (len < 3 || len > MAX_USERNAME_LENGTH) return 0;
     
-    // Check for valid characters (alphanumeric and underscore)
     for (size_t i = 0; i < len; i++) {
         if (!isalnum(username[i]) && username[i] != '_') {
             return 0;

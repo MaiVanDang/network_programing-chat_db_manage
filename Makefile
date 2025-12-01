@@ -24,7 +24,8 @@ SERVER_SOURCES = server/server_main.c server/server.c common/protocol.c common/a
 SERVER_OBJECTS = $(SERVER_SOURCES:.c=.o)
 SERVER_TARGET = chat_server
 
-CLIENT_SOURCE = client/client.c
+CLIENT_SOURCES = client/client.c common/protocol.c  # Added protocol.c to client sources
+CLIENT_OBJECTS = $(CLIENT_SOURCES:.c=.o)
 CLIENT_TARGET = chat_client
 
 DB_MAIN = main.c
@@ -51,9 +52,9 @@ $(SERVER_TARGET): $(SERVER_OBJECTS)
 # Build client
 client: $(CLIENT_TARGET)
 
-$(CLIENT_TARGET): $(CLIENT_SOURCE)
-	@echo "Compiling client..."
-	$(CC) $(CFLAGS) -o $@ $^
+$(CLIENT_TARGET): $(CLIENT_OBJECTS)
+	@echo "Linking client..."
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 	@echo "✓ Client compiled successfully: ./$(CLIENT_TARGET)"
 
 # Build database manager
@@ -146,7 +147,7 @@ show-all: db
 # Insert sample data
 sample-data:
 	@echo "Inserting sample data..."
-	psql -U mquanvu -d network -f database/sample_data.sql
+	psql -U rin -d network -f database/sample_data.sql
 	@echo "✓ Sample data inserted"
 
 # Reset database (drop + create + sample data)
@@ -253,7 +254,7 @@ check-deps:
 # Clean all build files
 clean:
 	@echo "Cleaning build files..."
-	rm -f $(SERVER_OBJECTS) $(CLIENT_TARGET) $(DB_OBJECTS)
+	rm -f $(SERVER_OBJECTS) $(CLIENT_OBJECTS) $(DB_OBJECTS)
 	rm -f *.o
 	@echo "✓ Cleaned"
 
@@ -263,7 +264,7 @@ clean-server:
 
 # Clean client binary
 clean-client:
-	rm -f $(CLIENT_TARGET)
+	rm -f $(CLIENT_TARGET) $(CLIENT_OBJECTS)
 
 # Clean database manager
 clean-db:
