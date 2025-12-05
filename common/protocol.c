@@ -87,6 +87,7 @@ CommandType parse_command_type(const char *cmd_str) {
     if (strcmp(cmd_str, "GROUP_KICK") == 0) return CMD_GROUP_KICK;
     if (strcmp(cmd_str, "GROUP_MSG") == 0) return CMD_GROUP_MSG;
     if (strcmp(cmd_str, "SEND_OFFLINE_MSG") == 0) return CMD_SEND_OFFLINE_MSG;
+    if (strcmp(cmd_str, "FRIEND_PENDING") == 0) return CMD_FRIEND_PENDING;
     
     return CMD_UNKNOWN;
 }

@@ -26,6 +26,7 @@
 #define STATUS_GROUP_KICK_OK 114
 #define STATUS_GROUP_MSG_OK 115
 #define STATUS_OFFLINE_MSG_OK 116
+#define STATUS_FRIEND_PENDING_OK 117
 
 // Status codes - Client errors (2xx)
 #define STATUS_USERNAME_EXISTS 201
@@ -76,6 +77,7 @@ typedef enum {
     CMD_GROUP_KICK,
     CMD_GROUP_MSG,
     CMD_SEND_OFFLINE_MSG,
+    CMD_FRIEND_PENDING, // thêm mới để lấy danh sách lời mời kết bạn
     CMD_UNKNOWN
 } CommandType;
 

@@ -38,12 +38,12 @@ void print_group_menu();
 int handle_register(ClientConn *client);
 int handle_login(ClientConn *client);
 int handle_logout(ClientConn *client);
-void handle_friend_req(ClientConn *client);
-void handle_friend_accept(ClientConn *client);
-void handle_friend_decline(ClientConn *client);
-void handle_friend_remove(ClientConn *client);
-void handle_friend_list(ClientConn *client);
-void handle_send_message(ClientConn *client);
+int handle_friend_req(ClientConn *client);
+int handle_friend_accept(ClientConn *client);
+int handle_friend_decline(ClientConn *client);
+int handle_friend_remove(ClientConn *client);
+int handle_friend_list(ClientConn *client);
+int handle_send_message(ClientConn *client);
 void handle_group_create(ClientConn *client);
 void handle_group_invite(ClientConn *client);
 void handle_group_join(ClientConn *client);
@@ -317,41 +317,171 @@ int handle_logout(ClientConn *client) {
 // Friend Management Handlers
 // ============================================================================
 
-void handle_friend_req(ClientConn *client) {
-    /**
-    TO-DO 
-    */
+int handle_friend_req(ClientConn *client) {
+    printf("\n--- SEND FRIEND REQUEST ---\n");
+    printf("Enter username to send friend request: ");
+    
+    char *username = read_line();
+    if (!username || strlen(username) == 0) {
+        printf("Username cannot be empty!\n");
+        if (username) free(username);
+        return 1;
+    }
+    
+    // Tạo message theo protocol: FRIEND_REQ <username>
+    char message[BUFFER_SIZE];
+    snprintf(message, BUFFER_SIZE, "FRIEND_REQ %s", username);
+    
+    // Gửi message đến server
+    send_message(client, message);
+    printf("Sending friend request to %s...\n", username);
+    
+    // Nhận response từ server
+    int result = handle_server_response(client);
+    
+    free(username);
+    return result;
 }
 
-void handle_friend_accept(ClientConn *client) {
-    /**
-    TO-DO 
-    */
+int handle_friend_accept(ClientConn *client) {
+    printf("\n--- ACCEPT FRIEND REQUEST ---\n");
+
+    send_message(client, "FRIEND_PENDING");
+    handle_server_response(client);
+    printf("\n");
+
+    printf("Enter username to accept friend request from: ");
+    
+    char *username = read_line();
+    if (!username || strlen(username) == 0) {
+        printf("Username cannot be empty!\n");
+        if (username) free(username);
+        return 1;
+    }
+    
+    // Trim whitespace
+    char *trimmed = username;
+    while (*trimmed == ' ' || *trimmed == '\t') trimmed++;
+    
+    // Tạo message theo protocol: FRIEND_ACCEPT <username>
+    char message[BUFFER_SIZE];
+    snprintf(message, BUFFER_SIZE, "FRIEND_ACCEPT %s", trimmed);
+    
+    // Gửi message đến server
+    send_message(client, message);
+    printf("Accepting friend request from %s...\n", trimmed);
+    
+    // Nhận response từ server
+    int result = handle_server_response(client);
+    
+    free(username);
 }
 
-void handle_friend_decline(ClientConn *client) {
-    /**
-    TO-DO 
-    */
+int handle_friend_decline(ClientConn *client) {
+    printf("\n--- DECLINE FRIEND REQUEST ---\n");
+
+    send_message(client, "FRIEND_PENDING");
+    handle_server_response(client);
+    printf("\n");
+    
+    printf("Enter username to decline friend request from: ");
+    
+    char *username = read_line();
+    if (!username || strlen(username) == 0) {
+        printf("Username cannot be empty!\n");
+        if (username) free(username);
+        return 1;
+    }
+    
+    // Trim whitespace
+    char *trimmed = username;
+    while (*trimmed == ' ' || *trimmed == '\t') trimmed++;
+    
+    // Tạo message theo protocol: FRIEND_DECLINE <username>
+    char message[BUFFER_SIZE];
+    snprintf(message, BUFFER_SIZE, "FRIEND_DECLINE %s", trimmed);
+    
+    // Gửi message đến server
+    send_message(client, message);
+    printf("Declining friend request from %s...\n", trimmed);
+    
+    // Nhận response từ server
+    int result = handle_server_response(client);
+    
+    free(username);
+    return result;
 }
 
-void handle_friend_remove(ClientConn *client) {
-    /**
-    TO-DO 
-    */
+int handle_friend_remove(ClientConn *client) {
+    printf("\n--- REMOVE FRIEND ---\n");
+
+    // Hiển thị danh sách bạn bè trước
+    printf("\nFetching your friend list...\n");
+    send_message(client, "FRIEND_LIST");
+    handle_server_response(client);
+    printf("\n");
+    
+    // Nhập username muốn hủy kết bạn
+    printf("Enter username to remove from friend list (or press Enter to cancel): ");
+    
+    char *username = read_line();
+    if (!username || strlen(username) == 0) {
+        printf("Cancelled.\n");
+        if (username) free(username);
+        return 1;
+    }
+    
+    // Trim whitespace
+    char *trimmed = username;
+    while (*trimmed == ' ' || *trimmed == '\t') trimmed++;
+    
+    // Xác nhận
+    printf("\n⚠️  WARNING: Are you sure you want to remove '%s' from your friend list? (y/n): ", trimmed);
+    char confirm[10];
+    if (fgets(confirm, sizeof(confirm), stdin)) {
+        if (confirm[0] != 'y' && confirm[0] != 'Y') {
+            printf("Cancelled.\n");
+            free(username);
+            return 1;
+        }
+    }
+    
+    // Tạo message theo protocol: FRIEND_REMOVE <username>
+    char message[BUFFER_SIZE];
+    snprintf(message, BUFFER_SIZE, "FRIEND_REMOVE %s", trimmed);
+    
+    // Gửi message đến server
+    send_message(client, message);
+    printf("Removing friend %s...\n", trimmed);
+    
+    // Nhận response từ server
+    int result = handle_server_response(client);
+    
+    free(username);
+    return result;
 }
 
-void handle_friend_list(ClientConn *client) {
-    /**
-    TO-DO 
-    */
+int handle_friend_list(ClientConn *client) {
+    printf("\n--- MY FRIEND LIST ---\n");
+    
+    // Gửi command đến server
+    send_message(client, "FRIEND_LIST");
+    printf("Fetching friend list...\n");
+    
+    // Nhận và hiển thị danh sách
+    int result = handle_server_response(client);
+    
+    printf("\nPress Enter to continue...");
+    getchar();
+    
+    return result;
 }
 
 // ============================================================================
 // Messaging Handler
 // ============================================================================
 
-void handle_send_message(ClientConn *client) {
+int handle_send_message(ClientConn *client) {
     /**
     TO-DO 
     */
@@ -499,9 +629,29 @@ int main(int argc, char *argv[]) {
             }
             
             case 2: { // Friend Management
-                /**
-			    TO-DO 
-			    */
+                int friend_continue = 1;
+                while (friend_continue && global_client.connected) {
+                    check_server_messages(&global_client);
+                    
+                    print_friend_menu();
+                    int friend_choice;
+                    if (scanf("%d", &friend_choice) != 1) {
+                        while (getchar() != '\n');
+                        printf("Invalid input!\n");
+                        continue;
+                    }
+                    while (getchar() != '\n');
+                    
+                    switch (friend_choice) {
+                        case 1: handle_friend_req(&global_client); break;
+                        case 2: handle_friend_accept(&global_client); break;
+                        case 3: handle_friend_decline(&global_client); break;
+                        case 4: handle_friend_remove(&global_client); break;
+                        case 5: handle_friend_list(&global_client); break;
+                        case 6: friend_continue = 0; break;
+                        default: printf("Invalid choice!\n");
+                    }
+                }
                 break;
             }
             

@@ -1,5 +1,6 @@
 #include "../server/server.h"
 #include "../database/database.h"
+#include "friend.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -257,10 +258,29 @@ void server_handle_client_message(Server *server, ClientSession *client, const c
             break;
             
         case CMD_FRIEND_REQ:
+            handle_friend_request(server, client, cmd);
+            break;
+
         case CMD_FRIEND_ACCEPT:
+            handle_friend_accept(server, client, cmd);
+            break;
+
+        case CMD_FRIEND_PENDING:
+            handle_friend_pending(server, client, cmd);
+            break;
+            
         case CMD_FRIEND_DECLINE:
+            handle_friend_decline(server, client, cmd);
+            break;
+
         case CMD_FRIEND_REMOVE:
+            handle_friend_remove(server, client, cmd);
+            break;
+
         case CMD_FRIEND_LIST:
+            handle_friend_list(server, client);
+            break;
+
         case CMD_MSG:
         case CMD_GROUP_CREATE:
         case CMD_GROUP_INVITE:
