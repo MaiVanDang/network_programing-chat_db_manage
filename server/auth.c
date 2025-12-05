@@ -229,6 +229,15 @@ void handle_logout_command(Server *server, ClientSession *client, ParsedCommand 
 }
 
 // ============================================================================
+// Group Command Handlers (External - from group.c)
+// ============================================================================
+
+extern void handle_group_create_command(Server *server, ClientSession *client, ParsedCommand *cmd);
+extern void handle_group_invite_command(Server *server, ClientSession *client, ParsedCommand *cmd);
+extern void handle_group_kick_command(Server *server, ClientSession *client, ParsedCommand *cmd);
+extern void handle_group_leave_command(Server *server, ClientSession *client, ParsedCommand *cmd);
+
+// ============================================================================
 // Message Router
 // ============================================================================
 
@@ -262,11 +271,25 @@ void server_handle_client_message(Server *server, ClientSession *client, const c
         case CMD_FRIEND_REMOVE:
         case CMD_FRIEND_LIST:
         case CMD_MSG:
+        	
         case CMD_GROUP_CREATE:
+        	handle_group_create_command(server, client, cmd);
+            break;
+            
         case CMD_GROUP_INVITE:
+        	handle_group_invite_command(server, client, cmd);
+            break;
+            
         case CMD_GROUP_JOIN:
+        	
         case CMD_GROUP_LEAVE:
+        	handle_group_leave_command(server, client, cmd);
+            break;
+        	
         case CMD_GROUP_KICK:
+        	handle_group_kick_command(server, client, cmd);
+            break;
+            
         case CMD_GROUP_MSG:
         case CMD_SEND_OFFLINE_MSG:
             {
