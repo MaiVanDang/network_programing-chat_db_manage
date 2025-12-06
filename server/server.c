@@ -1,5 +1,6 @@
 #include "server.h"
 #include "../database/database.h"
+#include "../common/router.h" 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

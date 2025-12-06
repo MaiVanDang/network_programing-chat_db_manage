@@ -362,15 +362,49 @@ void handle_send_message(ClientConn *client) {
 // ============================================================================
 
 void handle_group_create(ClientConn *client) {
-    /**
-    TO-DO 
-    */
+    printf("\n--- CREATE GROUP ---\n");
+    printf("Enter group name: ");
+    char *group_name = read_line();
+    if (!group_name || strlen(group_name) == 0) {
+        printf("Group name cannot be empty!\n");
+        if (group_name) free(group_name);
+        return;
+    }
+    
+    char message[BUFFER_SIZE];
+    snprintf(message, BUFFER_SIZE, "GROUP_CREATE %s", group_name);
+    send_message(client, message);
+    
+    handle_server_response(client);
+    free(group_name);
 }
 
 void handle_group_invite(ClientConn *client) {
-    /**
-    TO-DO 
-    */
+    printf("\n--- INVITE TO GROUP ---\n");
+    printf("Enter group name: ");
+    char *group_name = read_line();
+    if (!group_name || strlen(group_name) == 0) {
+        printf("Group name cannot be empty!\n");
+        if (group_name) free(group_name);
+        return;
+    }
+    
+    printf("Enter username: ");
+    char *username = read_line();
+    if (!username || strlen(username) == 0) {
+        printf("Username cannot be empty!\n");
+        free(group_name);
+        if (username) free(username);
+        return;
+    }
+    
+    char message[BUFFER_SIZE];
+    snprintf(message, BUFFER_SIZE, "GROUP_INVITE %s %s", group_name, username);
+    send_message(client, message);
+    
+    handle_server_response(client);
+    free(group_name);
+    free(username);
 }
 
 void handle_group_join(ClientConn *client) {
@@ -505,16 +539,39 @@ int main(int argc, char *argv[]) {
                 break;
             }
             
-            case 3: // Send Message
+            case 3:{ // Send Message
                 /**
 			    TO-DO 
 			    */
+			}
                 break;
         
             case 4: { // Group Chat
-                /**
-			    TO-DO 
-			    */
+                int group_continue = 1;
+				while(group_continue && global_client.connected) {
+					check_server_messages(&global_client);
+					
+					print_group_menu();
+                    int group_choice;
+                    if (scanf("%d", &group_choice) != 1) {
+                        while (getchar() != '\n');
+                        printf("Invalid input!\n");
+                        continue;
+                    }
+                    
+                    while (getchar() != '\n');
+                    
+                    switch (group_choice) {
+                        case 1: handle_group_create(&global_client); break;
+                        case 2: handle_group_invite(&global_client); break;
+                        case 3: handle_group_join(&global_client); break;
+                        case 4: handle_group_leave(&global_client); break;
+                        case 5: handle_group_kick(&global_client); break;
+                        case 6: handle_group_msg(&global_client); break;
+                        case 7: group_continue = 0; break;
+                        default: printf("Invalid choice!\n");
+                    }
+				}
                 break;
             }
             

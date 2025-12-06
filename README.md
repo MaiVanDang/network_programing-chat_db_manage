@@ -12,7 +12,7 @@ A TCP-based chat server and client implementation with:
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 chat-server/
@@ -38,7 +38,7 @@ chat-server/
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Install Dependencies
 

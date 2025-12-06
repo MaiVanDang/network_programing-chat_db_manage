@@ -1,13 +1,39 @@
 #include "../server/server.h"
 #include "../database/database.h"
+#include "../server/group.h" 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <openssl/sha.h>
 
 // ============================================================================
 // TASK 3: Register & Manage account
 // ============================================================================
+
+int validate_username(const char *username) {
+    if (!username) return 0;
+    
+    size_t len = strlen(username);
+    if (len < 3 || len > MAX_USERNAME_LENGTH) return 0;
+    
+    for (size_t i = 0; i < len; i++) {
+        if (!isalnum(username[i]) && username[i] != '_') {
+            return 0;
+        }
+    }
+    
+    return 1;
+}
+
+int validate_password(const char *password) {
+    if (!password) return 0;
+    
+    size_t len = strlen(password);
+    if (len < 6 || len > MAX_PASSWORD_LENGTH) return 0;
+    
+    return 1;
+}
 
 void hash_password(const char *password, char *output) {
     unsigned char hash[SHA256_DIGEST_LENGTH];
@@ -193,7 +219,7 @@ void handle_login_command(Server *server, ClientSession *client, ParsedCommand *
     server_send_response(client, response);
     free(response);
     
-    printf("? User logged in: %s (id=%d, fd=%d)\n", 
+    printf("User logged in: %s (id=%d, fd=%d)\n", 
            cmd->username, user_id, client->socket_fd);
 }
 
@@ -228,62 +254,3 @@ void handle_logout_command(Server *server, ClientSession *client, ParsedCommand 
     free(response);
 }
 
-// ============================================================================
-// Message Router
-// ============================================================================
-
-void server_handle_client_message(Server *server, ClientSession *client, const char *message) {
-    if (!server || !client || !message) return;
-    
-    ParsedCommand *cmd = parse_protocol_message(message);
-    if (!cmd) {
-        char *response = build_simple_response(STATUS_UNDEFINED_ERROR);
-        server_send_response(client, response);
-        free(response);
-        return;
-    }
-    
-    switch (cmd->cmd_type) {
-        case CMD_REGISTER:
-            handle_register_command(server, client, cmd);
-            break;
-            
-        case CMD_LOGIN:
-            handle_login_command(server, client, cmd);
-            break;
-            
-        case CMD_LOGOUT:
-            handle_logout_command(server, client, cmd);
-            break;
-            
-        case CMD_FRIEND_REQ:
-        case CMD_FRIEND_ACCEPT:
-        case CMD_FRIEND_DECLINE:
-        case CMD_FRIEND_REMOVE:
-        case CMD_FRIEND_LIST:
-        case CMD_MSG:
-        case CMD_GROUP_CREATE:
-        case CMD_GROUP_INVITE:
-        case CMD_GROUP_JOIN:
-        case CMD_GROUP_LEAVE:
-        case CMD_GROUP_KICK:
-        case CMD_GROUP_MSG:
-        case CMD_SEND_OFFLINE_MSG:
-            {
-                char *response = build_response(500, "Command not implemented yet");
-                server_send_response(client, response);
-                free(response);
-            }
-            break;
-            
-        default:
-            {
-                char *response = build_simple_response(STATUS_UNDEFINED_ERROR);
-                server_send_response(client, response);
-                free(response);
-            }
-            break;
-    }
-    
-    free_parsed_command(cmd);
-}

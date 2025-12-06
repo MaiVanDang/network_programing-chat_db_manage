@@ -169,7 +169,7 @@ ParsedCommand* parse_protocol_message(const char *raw_message) {
         case CMD_GROUP_KICK:
             token = strtok(NULL, " ");
             if (token) {
-                strncpy(cmd->group_id, token, MAX_USERNAME_LENGTH - 1);
+                strncpy(cmd->group_name, token, MAX_USERNAME_LENGTH - 1);
                 cmd->param_count++;
             }
             token = strtok(NULL, " ");
@@ -233,30 +233,3 @@ char* build_simple_response(int status_code) {
     return build_response(status_code, "");
 }
 
-// ============================================================================
-// Validation Functions
-// ============================================================================
-
-int validate_username(const char *username) {
-    if (!username) return 0;
-    
-    size_t len = strlen(username);
-    if (len < 3 || len > MAX_USERNAME_LENGTH) return 0;
-    
-    for (size_t i = 0; i < len; i++) {
-        if (!isalnum(username[i]) && username[i] != '_') {
-            return 0;
-        }
-    }
-    
-    return 1;
-}
-
-int validate_password(const char *password) {
-    if (!password) return 0;
-    
-    size_t len = strlen(password);
-    if (len < 6 || len > MAX_PASSWORD_LENGTH) return 0;
-    
-    return 1;
-}
