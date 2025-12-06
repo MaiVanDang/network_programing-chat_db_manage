@@ -1,6 +1,9 @@
 #include "../server/server.h"
 #include "../database/database.h"
+<<<<<<< HEAD:server/auth.c
 #include "../server/group.h" 
+=======
+>>>>>>> 47e5e129fb738390bbf77a992d9a8a52e0e21ea8:common/auth.c
 #include "friend.h"
 #include <stdio.h>
 #include <stdlib.h>
