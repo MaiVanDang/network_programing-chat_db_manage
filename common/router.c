@@ -71,12 +71,12 @@ void server_handle_client_message(Server *server, ClientSession *client, const c
         case CMD_GROUP_JOIN:
         	
         case CMD_GROUP_LEAVE:
-//        	handle_group_leave_command(server, client, cmd);
-//            break;
+        	handle_group_leave_command(server, client, cmd);
+            break;
         	
         case CMD_GROUP_KICK:
-//        	handle_group_kick_command(server, client, cmd);
-//            break;
+        	handle_group_kick_command(server, client, cmd);
+            break;
             
         case CMD_GROUP_MSG:
         case CMD_SEND_OFFLINE_MSG:

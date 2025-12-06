@@ -1,6 +1,7 @@
 # ============================================================================
 # Chat Server & Client - Makefile
 # ============================================================================
+SHELL := /bin/bash
 
 CC = gcc
 CFLAGS = -Wall -Wextra -g -I. -Iserver -Icommon -Idatabase
@@ -146,7 +147,7 @@ show-all: db
 # Insert sample data
 sample-data:
 	@echo "Inserting sample data..."
-	psql -U mquanvu -d network -f database/sample_data.sql
+	psql -U rin -d network -f database/sample_data.sql
 	@echo "✓ Sample data inserted"
 
 # Reset database (drop + create + sample data)
