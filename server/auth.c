@@ -1,6 +1,7 @@
 #include "../server/server.h"
 #include "../database/database.h"
 #include "../server/group.h" 
+#include "friend.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
