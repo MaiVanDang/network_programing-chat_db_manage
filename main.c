@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
         }
     }
     else {
-        printf("\n✓ Database Manager Ready!\n");
+        printf("\n Database Manager Ready!\n");
         printf("Use 'make show-users' or other make commands to view data.\n");
     }
     

@@ -20,7 +20,7 @@ CFLAGS += $(PG_CFLAGS) $(SSL_CFLAGS)
 LDFLAGS = $(PG_LDFLAGS) $(SSL_LDFLAGS)
 
 # Source files
-SERVER_SOURCES = server/server_main.c server/server.c common/protocol.c server/auth.c database/database.c server/group.c
+SERVER_SOURCES = server/server_main.c server/server.c server/auth.c database/database.c server/group.c common/protocol.c common/router.c
 SERVER_OBJECTS = $(SERVER_SOURCES:.c=.o)
 SERVER_TARGET = chat_server
 

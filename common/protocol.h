@@ -86,6 +86,7 @@ typedef struct {
     char password[MAX_PASSWORD_LENGTH];
     char target_user[MAX_USERNAME_LENGTH];
     char group_id[MAX_USERNAME_LENGTH];
+    char group_name[MAX_USERNAME_LENGTH];
     char message[MAX_MESSAGE_LENGTH];
     int param_count;
 } ParsedCommand;
@@ -113,9 +114,5 @@ void free_parsed_command(ParsedCommand *cmd);
 // Protocol response builders
 char* build_response(int status_code, const char *message);
 char* build_simple_response(int status_code);
-
-// Validation functions
-int validate_username(const char *username);
-int validate_password(const char *password);
 
 #endif

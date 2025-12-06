@@ -380,9 +380,31 @@ void handle_group_create(ClientConn *client) {
 }
 
 void handle_group_invite(ClientConn *client) {
-    /**
-    TO-DO 
-    */
+    printf("\n--- INVITE TO GROUP ---\n");
+    printf("Enter group name: ");
+    char *group_name = read_line();
+    if (!group_name || strlen(group_name) == 0) {
+        printf("Group name cannot be empty!\n");
+        if (group_name) free(group_name);
+        return;
+    }
+    
+    printf("Enter username: ");
+    char *username = read_line();
+    if (!username || strlen(username) == 0) {
+        printf("Username cannot be empty!\n");
+        free(group_name);
+        if (username) free(username);
+        return;
+    }
+    
+    char message[BUFFER_SIZE];
+    snprintf(message, BUFFER_SIZE, "GROUP_INVITE %s %s", group_name, username);
+    send_message(client, message);
+    
+    handle_server_response(client);
+    free(group_name);
+    free(username);
 }
 
 void handle_group_join(ClientConn *client) {
