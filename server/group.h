@@ -3,5 +3,7 @@
 
 void handle_group_create_command(Server *server, ClientSession *client, ParsedCommand *cmd);
 void handle_group_invite_command(Server *server, ClientSession *client, ParsedCommand *cmd);
+void handle_group_kick_command(Server *server, ClientSession *client, ParsedCommand *cmd);
+void handle_group_leave_command(Server *server, ClientSession *client, ParsedCommand *cmd);
 
 #endif

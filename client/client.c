@@ -545,15 +545,49 @@ void handle_group_join(ClientConn *client) {
 }
 
 void handle_group_leave(ClientConn *client) {
-    /**
-    TO-DO 
-    */
+    printf("\n--- LEAVE GROUP ---\n");
+    printf("Enter group name: ");
+    char *group_name = read_line();
+    if (!group_name || strlen(group_name) == 0) {
+        printf("Group name cannot be empty!\n");
+        if (group_name) free(group_name);
+        return;
+    }
+    
+    char message[BUFFER_SIZE];
+    snprintf(message, BUFFER_SIZE, "GROUP_LEAVE %s", group_name);
+    send_message(client, message);
+    
+    handle_server_response(client);
+    free(group_name);
 }
 
 void handle_group_kick(ClientConn *client) {
-    /**
-    TO-DO 
-    */
+    printf("\n--- KICK FROM GROUP ---\n");
+    printf("Enter group name: ");
+    char *group_name = read_line();
+    if (!group_name || strlen(group_name) == 0) {
+        printf("Group name cannot be empty!\n");
+        if (group_name) free(group_name);
+        return;
+    }
+    
+    printf("Enter username: ");
+    char *username = read_line();
+    if (!username || strlen(username) == 0) {
+        printf("Username cannot be empty!\n");
+        free(group_name);
+        if (username) free(username);
+        return;
+    }
+    
+    char message[BUFFER_SIZE];
+    snprintf(message, BUFFER_SIZE, "GROUP_KICK %s %s", group_name, username);
+    send_message(client, message);
+    
+    handle_server_response(client);
+    free(group_name);
+    free(username);
 }
 
 void handle_group_msg(ClientConn *client) {

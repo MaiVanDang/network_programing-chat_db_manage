@@ -161,7 +161,7 @@ ParsedCommand* parse_protocol_message(const char *raw_message) {
         case CMD_GROUP_LEAVE:
             token = strtok(NULL, " ");
             if (token) {
-                strncpy(cmd->group_id, token, MAX_USERNAME_LENGTH - 1);
+                strncpy(cmd->group_name, token, MAX_USERNAME_LENGTH - 1);
                 cmd->param_count++;
             }
             break;
