@@ -437,7 +437,7 @@ int handle_friend_remove(ClientConn *client) {
     while (*trimmed == ' ' || *trimmed == '\t') trimmed++;
     
     // Xác nhận
-    printf("\n⚠️  WARNING: Are you sure you want to remove '%s' from your friend list? (y/n): ", trimmed);
+    printf("\nWARNING: Are you sure you want to remove '%s' from your friend list? (y/n): ", trimmed);
     char confirm[10];
     if (fgets(confirm, sizeof(confirm), stdin)) {
         if (confirm[0] != 'y' && confirm[0] != 'Y') {
@@ -482,10 +482,170 @@ int handle_friend_list(ClientConn *client) {
 // Messaging Handler
 // ============================================================================
 
-int handle_send_message(ClientConn *client) {
-    /**
-    TO-DO 
-    */
+
+int handle_messaging_mode(ClientConn *client) {
+    printf("\n--- DIRECT MESSAGING MODE ---\n");
+    
+    // 1. Type receiver username
+    printf("Enter receiver username: ");
+    char *receiver = read_line();
+    if (!receiver || strlen(receiver) == 0) {
+        printf("Username cannot be empty!\n");
+        if (receiver) free(receiver);
+        return 1;
+    }
+    
+    char *trimmed_receiver = receiver;
+    while (*trimmed_receiver == ' ' || *trimmed_receiver == '\t') 
+        trimmed_receiver++;
+    
+    char get_offline_cmd[BUFFER_SIZE];
+    snprintf(get_offline_cmd, sizeof(get_offline_cmd), "GET_OFFLINE_MSG %s", trimmed_receiver);
+    send_message(client, get_offline_cmd);
+
+    sleep(1);
+    check_server_messages(client);
+
+    printf("\n--- Chatting with: %s ---\n", trimmed_receiver);
+    printf("--- Type 'exit' to leave chat ---\n\n");
+    
+    printf("[\033[32mYou\033[0m]: ");
+    fflush(stdout);
+    
+    // 2. Enter chat loop với select()
+    fd_set read_fds;
+    struct timeval timeout;
+    char input_buffer[MAX_MESSAGE_LENGTH];
+    
+    while (client->connected) {
+        // Reset fd_set
+        FD_ZERO(&read_fds);
+        FD_SET(STDIN_FILENO, &read_fds);     // stdin (keyboard input)
+        FD_SET(client->sockfd, &read_fds);   // socket (server messages)
+        
+        // Set timeout (1 second)
+        timeout.tv_sec = 1;
+        timeout.tv_usec = 0;
+        
+        int max_fd = (client->sockfd > STDIN_FILENO) ? client->sockfd : STDIN_FILENO;
+        
+        // Wait for activity on stdin or socket
+        int activity = select(max_fd + 1, &read_fds, NULL, NULL, &timeout);
+        
+        if (activity < 0) {
+            perror("select() error");
+            break;
+        }
+        
+        // Check if there's data from server (socket)
+        if (FD_ISSET(client->sockfd, &read_fds)) {
+            char buffer[BUFFER_SIZE];
+            int bytes_received = recv(client->sockfd, buffer, sizeof(buffer) - 1, 0);
+            
+            if (bytes_received <= 0) {
+                if (bytes_received == 0) {
+                    printf("\nServer disconnected!\n");
+                } else {
+                    perror("recv() error");
+                }
+                client->connected = 0;
+                break;
+            }
+            
+            buffer[bytes_received] = '\0';
+            
+            // Append to stream buffer
+            if (!stream_buffer_append(client->recv_buffer, buffer, bytes_received)) {
+                fprintf(stderr, "Buffer overflow\n");
+                break;
+            }
+            
+            // Extract and display messages
+            char *message;
+            while ((message = stream_buffer_extract_message(client->recv_buffer)) != NULL) {
+                // Parse message to check if it's from the current chat partner
+                if (strstr(message, "NEW_MESSAGE from") && strstr(message, trimmed_receiver)) {
+                    // Extract message content after "NEW_MESSAGE from <user>: "
+                    char *msg_start = strstr(message, ": ");
+                    if (msg_start) {
+                        msg_start += 2;  // Skip ": "
+                        printf("\r\033[K");  // Clear current line
+                        printf("[\033[36m%s\033[0m]: %s\n", trimmed_receiver, msg_start);
+                        printf("[\033[32mYou\033[0m]: ");
+                        fflush(stdout);
+                    }
+                }
+                // User not found
+                if (strstr(message, "303")) {
+                    printf("\r\033[K");  // Clear line
+                    printf("User '%s' not found!\n", trimmed_receiver);
+                    printf("[\033[32mYou\033[0m]: ");
+                    fflush(stdout);
+                }
+                // User offline
+                if (strstr(message, "404")) {
+                    printf("\r\033[K");  // Clear line
+                    printf("User '%s' is offline. Message will be delivered when they are online.\n", trimmed_receiver);
+                    printf("[\033[32mYou\033[0m]: ");
+                    fflush(stdout);
+                }
+                // Not friends
+                if (strstr(message, "403")) {
+                    printf("\r\033[K");  // Clear line
+                    printf("You are not friends with '%s'. Cannot send message.\n", trimmed_receiver);
+                    printf("[\033[32mYou\033[0m]: ");
+                    fflush(stdout);
+                }
+                free(message);
+            }
+        }
+        
+        // Check if there's user input from stdin
+        if (FD_ISSET(STDIN_FILENO, &read_fds)) {
+            if (fgets(input_buffer, sizeof(input_buffer), stdin) != NULL) {
+                size_t len = strlen(input_buffer);
+                if (len > 0 && input_buffer[len - 1] == '\n') {
+                    input_buffer[len - 1] = '\0';
+                    len--;
+                }
+                
+                // Check for exit command
+                if (strcmp(input_buffer, "exit") == 0) {
+                    printf("\nExiting chat with %s...\n", trimmed_receiver);
+                    break;
+                }
+                
+                // Skip empty messages
+                if (len == 0) {
+                    printf("[\033[32mYou\033[0m]: ");
+                    fflush(stdout);
+                    continue;
+                }
+                
+                // Check message length
+                if (len > MAX_MESSAGE_LENGTH - 1) {
+                    printf("\r\033[K");  // Clear line
+                    printf("Message too long! Maximum %d characters.\n", MAX_MESSAGE_LENGTH - 1);
+                    printf("[\033[32mYou\033[0m]: ");
+                    fflush(stdout);
+                    continue;
+                }
+                
+                // Send message to server
+                char message[BUFFER_SIZE];
+                snprintf(message, BUFFER_SIZE, "MSG %s %s", trimmed_receiver, input_buffer);
+                send_message(client, message);
+                
+                // Display sent message
+                printf("\r\033[K");  // Clear line
+                printf("[\033[32mYou\033[0m]: ");
+                fflush(stdout);
+            }
+        }
+    }
+    
+    free(receiver);
+    return 0;
 }
 
 // ============================================================================
@@ -724,12 +884,10 @@ int main(int argc, char *argv[]) {
                 break;
             }
             
-            case 3:{ // Send Message
-                /**
-			    TO-DO 
-			    */
-			}
+            case 3: { // Send Message
+                handle_messaging_mode(&global_client);
                 break;
+            }
         
             case 4: { // Group Chat
                 int group_continue = 1;

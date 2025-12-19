@@ -3,6 +3,7 @@
 #include "../server/group.h"
 #include "../server/auth.h"
 #include "../server/friend.h"
+#include "../server/message.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -59,6 +60,12 @@ void server_handle_client_message(Server *server, ClientSession *client, const c
             break;
 
         case CMD_MSG:
+            handle_send_message(server, client, cmd);
+            break;
+
+        case CMD_GET_OFFLINE_MSG:  // Thêm mới
+            handle_get_offline_messages(server, client, cmd);
+            break;
         	
         case CMD_GROUP_CREATE:
         	handle_group_create_command(server, client, cmd);

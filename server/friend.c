@@ -6,9 +6,8 @@
 #include <string.h>
 
 #define BUFFER_SIZE 8192
-// ============================================================================
+
 // Friend Management Functions
-// ============================================================================
 
 void handle_friend_request(Server *server, ClientSession *client, ParsedCommand *cmd) {
     char *response = NULL;
@@ -662,7 +661,7 @@ void handle_friend_list(Server *server, ClientSession *client) {  // BỎ Parsed
         
         // Chuyển đổi is_online
         const char *status = "Offline";
-        if (is_online_str && (is_online_str[0] == 't' || is_online_str[0] == '1')) {
+        if (is_online_str && (is_online_str[0] == 't')) {
             status = "Online";
         }
         

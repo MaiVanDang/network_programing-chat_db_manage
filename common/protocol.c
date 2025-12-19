@@ -88,7 +88,8 @@ CommandType parse_command_type(const char *cmd_str) {
     if (strcmp(cmd_str, "GROUP_MSG") == 0) return CMD_GROUP_MSG;
     if (strcmp(cmd_str, "SEND_OFFLINE_MSG") == 0) return CMD_SEND_OFFLINE_MSG;
     if (strcmp(cmd_str, "FRIEND_PENDING") == 0) return CMD_FRIEND_PENDING;
-    
+    if (strcmp(cmd_str, "GET_OFFLINE_MSG") == 0) return CMD_GET_OFFLINE_MSG;  // Thêm mới
+
     return CMD_UNKNOWN;
 }
 
@@ -131,7 +132,8 @@ ParsedCommand* parse_protocol_message(const char *raw_message) {
                 cmd->param_count++;
             }
             break;
-            
+        
+        case CMD_GET_OFFLINE_MSG:
         case CMD_FRIEND_REQ:
         case CMD_FRIEND_ACCEPT:
         case CMD_FRIEND_DECLINE:
@@ -195,6 +197,7 @@ ParsedCommand* parse_protocol_message(const char *raw_message) {
             
         case CMD_LOGOUT:
         case CMD_FRIEND_LIST:
+        case CMD_FRIEND_PENDING:
             break;
             
         default:

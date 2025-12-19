@@ -27,10 +27,12 @@
 #define STATUS_GROUP_MSG_OK 115
 #define STATUS_OFFLINE_MSG_OK 116
 #define STATUS_FRIEND_PENDING_OK 117
+#define STATUS_GET_OFFLINE_MSG_OK 118
 
 // Status codes - Client errors (2xx)
 #define STATUS_USERNAME_EXISTS 201
 #define STATUS_WRONG_PASSWORD 202
+#define STATUS_NOT_HAVE_OFFLINE_MESSAGE 218
 
 // Status codes - Auth/Session errors (3xx)
 #define STATUS_INVALID_USERNAME 301
@@ -78,6 +80,7 @@ typedef enum {
     CMD_GROUP_MSG,
     CMD_SEND_OFFLINE_MSG,
     CMD_FRIEND_PENDING, // thêm mới để lấy danh sách lời mời kết bạn
+    CMD_GET_OFFLINE_MSG,
     CMD_UNKNOWN
 } CommandType;
 
