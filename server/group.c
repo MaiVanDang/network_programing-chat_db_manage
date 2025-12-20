@@ -135,7 +135,7 @@ void handle_group_create_command(Server *server, ClientSession *client, ParsedCo
     
     // Check authentication
     if (!client->is_authenticated) {
-        response = build_simple_response(STATUS_NOT_LOGGED_IN);
+        response = build_response(STATUS_NOT_LOGGED_IN, "NOT_LOGGED_IN - Please login first");
         server_send_response(client, response);
         free(response);
         return;
@@ -143,7 +143,7 @@ void handle_group_create_command(Server *server, ClientSession *client, ParsedCo
     
     // Check parameters
     if (cmd->param_count < 1 || strlen(cmd->group_name) == 0) {
-        response = build_simple_response(STATUS_UNDEFINED_ERROR);
+        response = build_response(STATUS_UNDEFINED_ERROR, "BAD_REQUEST - Group name required");
         server_send_response(client, response);
         free(response);
         return;
@@ -151,7 +151,7 @@ void handle_group_create_command(Server *server, ClientSession *client, ParsedCo
     
     // Validate group name
     if (strlen(cmd->group_name) < 3 || strlen(cmd->group_name) > 50) {
-        response = build_response(STATUS_UNDEFINED_ERROR, "Group name must be 3-50 characters");
+        response = build_response(STATUS_UNDEFINED_ERROR, "BAD_REQUEST - Group name must be 3-50 characters");
         server_send_response(client, response);
         free(response);
         return;
@@ -161,14 +161,14 @@ void handle_group_create_command(Server *server, ClientSession *client, ParsedCo
     int group_id = create_group(server->db_conn, cmd->group_name, client->user_id);
     
     if (group_id == -2) {
-        response = build_response(STATUS_GROUP_EXISTS, "Group name already exists");
+        response = build_response(STATUS_GROUP_EXISTS, "GROUP_EXISTS - Group name already exists");
         server_send_response(client, response);
         free(response);
         return;
     }
     
     if (group_id < 0) {
-        response = build_simple_response(STATUS_DATABASE_ERROR);
+        response = build_response(STATUS_DATABASE_ERROR, "UNKNOWN_ERROR - Failed to create group");
         server_send_response(client, response);
         free(response);
         return;
@@ -176,7 +176,7 @@ void handle_group_create_command(Server *server, ClientSession *client, ParsedCo
     
     // Success
     char msg[256];
-    snprintf(msg, sizeof(msg), "Group '%s' created with ID: %d", cmd->group_name, group_id);
+    snprintf(msg, sizeof(msg), "Group '%s' created successfully with ID: %d", cmd->group_name, group_id);
     response = build_response(STATUS_GROUP_CREATE_OK, msg);
     server_send_response(client, response);
     free(response);
@@ -202,18 +202,16 @@ int add_user_to_group(PGconn *conn, int group_id, int user_id) {
     return execute_query(conn, query);
 }
 
-/**
  * @brief Handle GROUP_INVITE command
- * Format: GROUP_INVITE <group_id> <username>
+ * Format: GROUP_INVITE <group_name> <username>
  */
 void handle_group_invite_command(Server *server, ClientSession *client, ParsedCommand *cmd) {
     if (!server || !client || !cmd) return;
     
     char *response = NULL;
     
-    // Check authentication
     if (!client->is_authenticated) {
-        response = build_simple_response(STATUS_NOT_LOGGED_IN);
+        response = build_response(STATUS_NOT_LOGGED_IN, "NOT_LOGGED_IN - Please login first");
         server_send_response(client, response);
         free(response);
         return;
@@ -221,7 +219,7 @@ void handle_group_invite_command(Server *server, ClientSession *client, ParsedCo
     
     // Check parameters
     if (cmd->param_count < 2) {
-        response = build_simple_response(STATUS_UNDEFINED_ERROR);
+        response = build_response(STATUS_UNDEFINED_ERROR, "BAD_REQUEST - Group name and username required");
         server_send_response(client, response);
         free(response);
         return;
@@ -229,7 +227,7 @@ void handle_group_invite_command(Server *server, ClientSession *client, ParsedCo
     
     char* group_name = cmd->group_name;
     if (!group_name) {
-        response = build_response(STATUS_INVALID_GROUP_ID, "Invalid group name");
+        response = build_response(STATUS_INVALID_GROUP_ID, "INVALID_GROUP_ID - Invalid group name");
         server_send_response(client, response);
         free(response);
         return;
@@ -238,7 +236,7 @@ void handle_group_invite_command(Server *server, ClientSession *client, ParsedCo
     // Check group exists
     int group_id = find_group_id(server->db_conn, group_name);
     if (group_id < 0) {
-        response = build_response(STATUS_GROUP_NOT_FOUND, "Group not found");
+        response = build_response(STATUS_GROUP_NOT_FOUND, "GROUP_NOT_FOUND - Group does not exist");
         server_send_response(client, response);
         free(response);
         return;
@@ -246,7 +244,7 @@ void handle_group_invite_command(Server *server, ClientSession *client, ParsedCo
     
     // Check caller is owner
     if (!is_group_owner(server->db_conn, group_id, client->user_id)) {
-        response = build_response(STATUS_NOT_GROUP_OWNER, "Only group owner can invite members");
+        response = build_response(STATUS_NOT_GROUP_OWNER, "NOT_GROUP_OWNER - Only group owner can invite members");
         server_send_response(client, response);
         free(response);
         return;
@@ -254,7 +252,7 @@ void handle_group_invite_command(Server *server, ClientSession *client, ParsedCo
     
     // Check target user exists
     if (!user_exists(server->db_conn, cmd->target_user)) {
-        response = build_simple_response(STATUS_USER_NOT_FOUND);
+        response = build_response(STATUS_USER_NOT_FOUND, "USER_NOT_FOUND - User does not exist");
         server_send_response(client, response);
         free(response);
         return;
@@ -269,7 +267,7 @@ void handle_group_invite_command(Server *server, ClientSession *client, ParsedCo
     PGresult *res = execute_query_with_result(server->db_conn, query);
     if (!res || PQntuples(res) == 0) {
         if (res) PQclear(res);
-        response = build_simple_response(STATUS_USER_NOT_FOUND);
+        response = build_response(STATUS_USER_NOT_FOUND, "USER_NOT_FOUND - User does not exist");
         server_send_response(client, response);
         free(response);
         return;
@@ -280,7 +278,7 @@ void handle_group_invite_command(Server *server, ClientSession *client, ParsedCo
     
     // Check if already in group
     if (is_in_group(server->db_conn, group_id, target_user_id)) {
-        response = build_response(STATUS_ALREADY_IN_GROUP, "User already in group");
+        response = build_response(STATUS_ALREADY_IN_GROUP, "ALREADY_IN_GROUP - User already in group");
         server_send_response(client, response);
         free(response);
         return;
@@ -288,7 +286,7 @@ void handle_group_invite_command(Server *server, ClientSession *client, ParsedCo
     
     // Add user to group
     if (!add_user_to_group(server->db_conn, group_id, target_user_id)) {
-        response = build_simple_response(STATUS_DATABASE_ERROR);
+        response = build_response(STATUS_DATABASE_ERROR, "UNKNOWN_ERROR - Failed to add user to group");
         server_send_response(client, response);
         free(response);
         return;
@@ -345,7 +343,7 @@ void handle_group_kick_command(Server *server, ClientSession *client, ParsedComm
     
     // Check authentication
     if (!client->is_authenticated) {
-        response = build_simple_response(STATUS_NOT_LOGGED_IN);
+        response = build_response(STATUS_NOT_LOGGED_IN, "NOT_LOGGED_IN - Please login first");
         server_send_response(client, response);
         free(response);
         return;
@@ -353,7 +351,7 @@ void handle_group_kick_command(Server *server, ClientSession *client, ParsedComm
     
     // Check parameters
     if (cmd->param_count < 2) {
-        response = build_simple_response(STATUS_UNDEFINED_ERROR);
+        response = build_response(STATUS_UNDEFINED_ERROR, "BAD_REQUEST - Group name and username required");
         server_send_response(client, response);
         free(response);
         return;
@@ -361,7 +359,7 @@ void handle_group_kick_command(Server *server, ClientSession *client, ParsedComm
     
     char* group_name = cmd->group_name;
     if (!group_name) {
-        response = build_response(STATUS_INVALID_GROUP_ID, "Invalid group name");
+        response = build_response(STATUS_INVALID_GROUP_ID, "INVALID_GROUP_ID - Invalid group name");
         server_send_response(client, response);
         free(response);
         return;
@@ -370,7 +368,7 @@ void handle_group_kick_command(Server *server, ClientSession *client, ParsedComm
     // Check group exists
     int group_id = find_group_id(server->db_conn, group_name);
     if (group_id < 0) {
-        response = build_response(STATUS_GROUP_NOT_FOUND, "Group not found");
+        response = build_response(STATUS_GROUP_NOT_FOUND, "GROUP_NOT_FOUND - Group does not exist");
         server_send_response(client, response);
         free(response);
         return;
@@ -378,7 +376,7 @@ void handle_group_kick_command(Server *server, ClientSession *client, ParsedComm
     
     // Check caller is owner
     if (!is_group_owner(server->db_conn, group_id, client->user_id)) {
-        response = build_response(STATUS_NOT_GROUP_OWNER, "Only group owner can kick members");
+        response = build_response(STATUS_NOT_GROUP_OWNER, "NOT_GROUP_OWNER - Only group owner can kick members");
         server_send_response(client, response);
         free(response);
         return;
@@ -386,7 +384,7 @@ void handle_group_kick_command(Server *server, ClientSession *client, ParsedComm
     
     // Check target user exists
     if (!user_exists(server->db_conn, cmd->target_user)) {
-        response = build_simple_response(STATUS_USER_NOT_FOUND);
+        response = build_response(STATUS_USER_NOT_FOUND, "USER_NOT_FOUND - User does not exist");
         server_send_response(client, response);
         free(response);
         return;
@@ -401,7 +399,7 @@ void handle_group_kick_command(Server *server, ClientSession *client, ParsedComm
     PGresult *res = execute_query_with_result(server->db_conn, query);
     if (!res || PQntuples(res) == 0) {
         if (res) PQclear(res);
-        response = build_simple_response(STATUS_USER_NOT_FOUND);
+        response = build_response(STATUS_USER_NOT_FOUND, "USER_NOT_FOUND - User does not exist");
         server_send_response(client, response);
         free(response);
         return;
@@ -412,7 +410,7 @@ void handle_group_kick_command(Server *server, ClientSession *client, ParsedComm
     
     // Check if target is in group
     if (!is_in_group(server->db_conn, group_id, target_user_id)) {
-        response = build_response(STATUS_NOT_IN_GROUP, "User not in group");
+        response = build_response(STATUS_NOT_IN_GROUP, "NOT_IN_GROUP - User not in group");
         server_send_response(client, response);
         free(response);
         return;
@@ -420,7 +418,7 @@ void handle_group_kick_command(Server *server, ClientSession *client, ParsedComm
     
     // Cannot kick owner
     if (is_group_owner(server->db_conn, group_id, target_user_id)) {
-        response = build_response(STATUS_CANNOT_KICK_OWNER, "Cannot kick group owner");
+        response = build_response(STATUS_CANNOT_KICK_OWNER, "CANNOT_KICK_OWNER - Cannot kick group owner");
         server_send_response(client, response);
         free(response);
         return;
@@ -428,7 +426,7 @@ void handle_group_kick_command(Server *server, ClientSession *client, ParsedComm
     
     // Remove user from group
     if (!remove_user_from_group(server->db_conn, group_id, target_user_id)) {
-        response = build_simple_response(STATUS_DATABASE_ERROR);
+        response = build_response(STATUS_DATABASE_ERROR, "UNKNOWN_ERROR - Failed to kick user from group");
         server_send_response(client, response);
         free(response);
         return;
@@ -436,21 +434,21 @@ void handle_group_kick_command(Server *server, ClientSession *client, ParsedComm
     
     // Success
     char msg[256];
-    snprintf(msg, sizeof(msg), "User '%s' kicked from group %d", cmd->target_user, group_id);
+    snprintf(msg, sizeof(msg), "User '%s' kicked from group '%s' successfully", cmd->target_user, group_name);
     response = build_response(STATUS_GROUP_KICK_OK, msg);
     server_send_response(client, response);
     free(response);
     
-    printf("User %s kicked from group %d by %s\n", 
-           cmd->target_user, group_id, client->username);
+    printf("User %s kicked from group %s by %s\n", 
+           cmd->target_user, group_name, client->username);
     
     // Notify target user if online
     ClientSession *target = server_get_client_by_username(server, cmd->target_user);
     if (target) {
         char notify[256];
         snprintf(notify, sizeof(notify), 
-                "NOTIFY You have been kicked from group %d by %s",
-                group_id, client->username);
+                "You have been kicked from group '%s' by %s",
+                group_name, client->username);
         char *notify_msg = build_response(STATUS_GROUP_KICK_OK, notify);
         server_send_response(target, notify_msg);
         free(notify_msg);
@@ -466,17 +464,15 @@ void handle_group_leave_command(Server *server, ClientSession *client, ParsedCom
     
     char *response = NULL;
     
-    // Check authentication
     if (!client->is_authenticated) {
-        response = build_simple_response(STATUS_NOT_LOGGED_IN);
+        response = build_response(STATUS_NOT_LOGGED_IN, "NOT_LOGGED_IN - Please login first");
         server_send_response(client, response);
         free(response);
         return;
     }
     
-    // Check parameters
     if (cmd->param_count < 1) {
-        response = build_simple_response(STATUS_UNDEFINED_ERROR);
+        response = build_response(STATUS_UNDEFINED_ERROR, "BAD_REQUEST - Group name required");
         server_send_response(client, response);
         free(response);
         return;
@@ -484,53 +480,48 @@ void handle_group_leave_command(Server *server, ClientSession *client, ParsedCom
     
     char* group_name = cmd->group_name;
     if (!group_name) {
-        response = build_response(STATUS_INVALID_GROUP_ID, "Invalid group name");
+        response = build_response(STATUS_INVALID_GROUP_NAME, "INVALID_GROUP_NAME - Invalid group name");
         server_send_response(client, response);
         free(response);
         return;
     }
     
-    // Check group exists
     int group_id = find_group_id(server->db_conn, group_name);
     if (group_id < 0) {
-        response = build_response(STATUS_GROUP_NOT_FOUND, "Group not found");
+        response = build_response(STATUS_GROUP_NOT_FOUND, "GROUP_NOT_FOUND - Group does not exist");
         server_send_response(client, response);
         free(response);
         return;
     }
     
-    // Check if in group
     if (!is_in_group(server->db_conn, group_id, client->user_id)) {
-        response = build_response(STATUS_NOT_IN_GROUP, "You are not in this group");
+        response = build_response(STATUS_NOT_IN_GROUP, "NOT_IN_GROUP - You are not in this group");
         server_send_response(client, response);
         free(response);
         return;
     }
     
-    // Owner cannot leave (must transfer ownership or delete group first)
     if (is_group_owner(server->db_conn, group_id, client->user_id)) {
         response = build_response(STATUS_NOT_GROUP_OWNER, 
-                "Owner cannot leave group. Transfer ownership or delete group first");
+                "OWNER_CANNOT_LEAVE - Owner cannot leave group. Transfer ownership or delete group first");
         server_send_response(client, response);
         free(response);
         return;
     }
     
-    // Remove user from group
     if (!remove_user_from_group(server->db_conn, group_id, client->user_id)) {
-        response = build_simple_response(STATUS_DATABASE_ERROR);
+        response = build_response(STATUS_DATABASE_ERROR, "UNKNOWN_ERROR - Failed to leave group");
         server_send_response(client, response);
         free(response);
         return;
     }
     
-    // Success
     char msg[128];
-    snprintf(msg, sizeof(msg), "You left group %d", group_id);
+    snprintf(msg, sizeof(msg), "You left group '%s' successfully", group_name);
     response = build_response(STATUS_GROUP_LEAVE_OK, msg);
     server_send_response(client, response);
     free(response);
     
-    printf("? User %s left group %d\n", client->username, group_id);
+    printf("User %s left group %s\n", client->username, group_name);
 }
 
