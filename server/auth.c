@@ -222,6 +222,7 @@ void handle_login_command(Server *server, ClientSession *client, ParsedCommand *
     
     printf("User logged in: %s (id=%d, fd=%d)\n", 
            cmd->username, user_id, client->socket_fd);
+    send_pending_notifications(server, client);
 }
 
 void handle_logout_command(Server *server, ClientSession *client, ParsedCommand *cmd) {

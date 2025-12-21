@@ -29,10 +29,14 @@ char* read_line();
 void send_message(ClientConn *client, const char *message);
 int handle_server_response(ClientConn *client);
 int check_server_messages(ClientConn *client);
+int get_menu_choice_with_notifications(ClientConn *client);
 void print_main_menu();
 void print_auth_menu();
 void print_friend_menu();
 void print_group_menu();
+void display_group_invite_notification(const char *message);
+void display_offline_notification(const char *message);
+void display_group_kick_notification(const char *message);
 
 // Handlers
 int handle_register(ClientConn *client);
@@ -179,19 +183,78 @@ int check_server_messages(ClientConn *client) {
     }
     
     char *message;
-    int messages_processed = 0;
+    int notification_count = 0;
     while ((message = stream_buffer_extract_message(client->recv_buffer)) != NULL) {
-        printf("[Server] %s\n", message);
+        
+        if (strstr(message, "GROUP_INVITE_NOTIFICATION")) {
+            display_group_invite_notification(message);
+            notification_count++;
+        } 
+        else if (strstr(message, "OFFLINE_NOTIFICATION")) {
+            display_offline_notification(message);
+            notification_count++;
+        }
+        else if (strstr(message, "GROUP_KICK_NOTIFICATION")) {
+            display_group_kick_notification(message);
+            notification_count++;
+        }
         free(message);
-        messages_processed++;
     }
     
-    return messages_processed;
+    return notification_count;
 }
 
 // ============================================================================
 // Menu Display Functions
 // ============================================================================
+
+int get_menu_choice_with_notifications(ClientConn *client) {
+    int choice = -1;
+    int got_input = 0;
+    
+    printf("Your choice: ");
+    fflush(stdout);
+    
+    while (!got_input && client->connected) {
+        fd_set read_fds;
+        struct timeval timeout;
+        
+        FD_ZERO(&read_fds);
+        FD_SET(STDIN_FILENO, &read_fds);
+        FD_SET(client->sockfd, &read_fds);
+        
+        timeout.tv_sec = 1;
+        timeout.tv_usec = 0;
+        
+        int max_fd = (client->sockfd > STDIN_FILENO) ? client->sockfd : STDIN_FILENO;
+        int activity = select(max_fd + 1, &read_fds, NULL, NULL, &timeout);
+        
+        if (activity < 0 && errno != EINTR) {
+            perror("select() error");
+            return -1;
+        }
+        
+        if (FD_ISSET(client->sockfd, &read_fds)) {
+            int notif_count = check_server_messages(client);
+            if (notif_count > 0) {
+                printf("\nYour choice: ");
+                fflush(stdout);
+            }
+        }
+        
+        if (FD_ISSET(STDIN_FILENO, &read_fds)) {
+            if (scanf("%d", &choice) == 1) {
+                got_input = 1;
+            } else {
+                printf("Invalid input!\nYour choice: ");
+                fflush(stdout);
+            }
+            while (getchar() != '\n');
+        }
+    }
+    
+    return choice;
+}
 
 void print_main_menu() {
     printf("\n");
@@ -204,7 +267,6 @@ void print_main_menu() {
     printf("4. Group Chat\n");
     printf("5. Exit\n");
     printf("========================================\n");
-    printf("Your choice: ");
 }
 
 void print_auth_menu() {
@@ -215,7 +277,6 @@ void print_auth_menu() {
     printf("3. Logout\n");
     printf("4. Back to main menu\n");
     printf("======================\n");
-    printf("Your choice: ");
 }
 
 void print_friend_menu() {
@@ -228,7 +289,6 @@ void print_friend_menu() {
     printf("5. List friends\n");
     printf("6. Back to main menu\n");
     printf("=========================\n");
-    printf("Your choice: ");
 }
 
 void print_group_menu() {
@@ -242,7 +302,153 @@ void print_group_menu() {
     printf("6. Send group message\n");
     printf("7. Back to main menu\n");
     printf("==================\n");
-    printf("Your choice: ");
+}
+
+void display_group_invite_notification(const char *message) {
+    int group_id = 0;
+    char group_name[128] = {0};
+    char invited_by[64] = {0};
+    char notification_msg[512] = {0};
+    
+    const char *id_start = strstr(message, "group_id=");
+    if (id_start) {
+        sscanf(id_start, "group_id=%d", &group_id);
+    }
+    
+    const char *name_start = strstr(message, "group_name=\"");
+    if (name_start) {
+        name_start += 12;
+        const char *name_end = strchr(name_start, '"');
+        if (name_end) {
+            int len = name_end - name_start;
+            if (len > 0 && len < sizeof(group_name)) {
+                strncpy(group_name, name_start, len);
+                group_name[len] = '\0';
+            }
+        }
+    }
+    
+    const char *inviter_start = strstr(message, "invited_by=\"");
+    if (inviter_start) {
+        inviter_start += 12;
+        const char *inviter_end = strchr(inviter_start, '"');
+        if (inviter_end) {
+            int len = inviter_end - inviter_start;
+            if (len > 0 && len < sizeof(invited_by)) {
+                strncpy(invited_by, inviter_start, len);
+                invited_by[len] = '\0';
+            }
+        }
+    }
+    
+    printf("\n");
+    printf("NEW GROUP INVITATION: \n");
+    printf("- Group: %s\n", group_name);
+    printf("- ID: %d\n", group_id);
+    printf("- Invited by: %s\n", invited_by);
+    printf("\n");
+}
+
+void display_offline_notification(const char *message) {
+    char type[64] = {0};
+    int group_id = 0;
+    char sender[64] = {0};
+    char notif_msg[512] = {0};
+    char time_str[64] = {0};
+    
+    const char *type_start = strstr(message, "type=\"");
+    if (type_start) {
+        type_start += 6;
+        const char *type_end = strchr(type_start, '"');
+        if (type_end) {
+            int len = type_end - type_start;
+            if (len > 0 && len < sizeof(type)) {
+                strncpy(type, type_start, len);
+                type[len] = '\0';
+            }
+        }
+    }
+    
+    const char *id_start = strstr(message, "group_id=");
+    if (id_start) {
+        sscanf(id_start, "group_id=%d", &group_id);
+    }
+    
+    const char *sender_start = strstr(message, "sender=\"");
+    if (sender_start) {
+        sender_start += 8;
+        const char *sender_end = strchr(sender_start, '"');
+        if (sender_end) {
+            int len = sender_end - sender_start;
+            if (len > 0 && len < sizeof(sender)) {
+                strncpy(sender, sender_start, len);
+                sender[len] = '\0';
+            }
+        }
+    }
+    
+    const char *msg_start = strstr(message, "message=\"");
+    if (msg_start) {
+        msg_start += 9;
+        const char *msg_end = strchr(msg_start, '"');
+        if (msg_end) {
+            int len = msg_end - msg_start;
+            if (len > 0 && len < sizeof(notif_msg)) {
+                strncpy(notif_msg, msg_start, len);
+                notif_msg[len] = '\0';
+            }
+        }
+    }
+    
+    printf("\n");
+    printf("OFFLINE NOTIFICATION: \n");
+    printf("- Message: %s\n", notif_msg);
+    printf("\n");
+}
+
+void display_group_kick_notification(const char *message) {
+    int group_id = 0;
+    char group_name[128] = {0};
+    char kicked_by[64] = {0};
+    char notification_msg[512] = {0};
+    
+    const char *id_start = strstr(message, "group_id=");
+    if (id_start) {
+        sscanf(id_start, "group_id=%d", &group_id);
+    }
+    
+    const char *name_start = strstr(message, "group_name=\"");
+    if (name_start) {
+        name_start += 12;
+        const char *name_end = strchr(name_start, '"');
+        if (name_end) {
+            int len = name_end - name_start;
+            if (len > 0 && len < sizeof(group_name)) {
+                strncpy(group_name, name_start, len);
+                group_name[len] = '\0';
+            }
+        }
+    }
+    
+    const char *kicker_start = strstr(message, "kicked_by=\"");
+    if (kicker_start) {
+        kicker_start += 11;
+        const char *kicker_end = strchr(kicker_start, '"');
+        if (kicker_end) {
+            int len = kicker_end - kicker_start;
+            if (len > 0 && len < sizeof(kicked_by)) {
+                strncpy(kicked_by, kicker_start, len);
+                kicked_by[len] = '\0';
+            }
+        }
+    }
+    
+    printf("\n");
+    printf("GROUP KICK NOTIFICATION: \n");
+    printf("- Group: %s\n", group_name);
+    printf("- ID: %d\n", group_id);
+    printf("- Kicked by: %s\n", kicked_by);
+    printf("\n");
 }
 
 // ============================================================================
@@ -302,6 +508,12 @@ int handle_login(ClientConn *client) {
     send_message(client, message);
     
     int result = handle_server_response(client);
+
+    if (result > 0) {
+        sleep(1);
+        check_server_messages(client);
+    }
+
     free(username);
     free(password);
     return result;
@@ -486,7 +698,6 @@ int handle_friend_list(ClientConn *client) {
 int handle_messaging_mode(ClientConn *client) {
     printf("\n--- DIRECT MESSAGING MODE ---\n");
     
-    // 1. Type receiver username
     printf("Enter receiver username: ");
     char *receiver = read_line();
     if (!receiver || strlen(receiver) == 0) {
@@ -512,24 +723,20 @@ int handle_messaging_mode(ClientConn *client) {
     printf("[\033[32mYou\033[0m]: ");
     fflush(stdout);
     
-    // 2. Enter chat loop với select()
     fd_set read_fds;
     struct timeval timeout;
     char input_buffer[MAX_MESSAGE_LENGTH];
     
     while (client->connected) {
-        // Reset fd_set
         FD_ZERO(&read_fds);
-        FD_SET(STDIN_FILENO, &read_fds);     // stdin (keyboard input)
-        FD_SET(client->sockfd, &read_fds);   // socket (server messages)
+        FD_SET(STDIN_FILENO, &read_fds);
+        FD_SET(client->sockfd, &read_fds);
         
-        // Set timeout (1 second)
         timeout.tv_sec = 1;
         timeout.tv_usec = 0;
         
         int max_fd = (client->sockfd > STDIN_FILENO) ? client->sockfd : STDIN_FILENO;
         
-        // Wait for activity on stdin or socket
         int activity = select(max_fd + 1, &read_fds, NULL, NULL, &timeout);
         
         if (activity < 0) {
@@ -537,7 +744,6 @@ int handle_messaging_mode(ClientConn *client) {
             break;
         }
         
-        // Check if there's data from server (socket)
         if (FD_ISSET(client->sockfd, &read_fds)) {
             char buffer[BUFFER_SIZE];
             int bytes_received = recv(client->sockfd, buffer, sizeof(buffer) - 1, 0);
@@ -554,44 +760,57 @@ int handle_messaging_mode(ClientConn *client) {
             
             buffer[bytes_received] = '\0';
             
-            // Append to stream buffer
             if (!stream_buffer_append(client->recv_buffer, buffer, bytes_received)) {
                 fprintf(stderr, "Buffer overflow\n");
                 break;
             }
             
-            // Extract and display messages
             char *message;
             while ((message = stream_buffer_extract_message(client->recv_buffer)) != NULL) {
-                // Parse message to check if it's from the current chat partner
-                if (strstr(message, "NEW_MESSAGE from") && strstr(message, trimmed_receiver)) {
-                    // Extract message content after "NEW_MESSAGE from <user>: "
+
+                if (strstr(message, "GROUP_INVITE_NOTIFICATION")) {
+                    printf("\r\033[K"); 
+                    display_group_invite_notification(message);
+                    printf("[\033[32mYou\033[0m]: ");
+                    fflush(stdout);
+                }
+                else if (strstr(message, "OFFLINE_NOTIFICATION")) {
+                    printf("\r\033[K");
+                    display_offline_notification(message);
+                    printf("[\033[32mYou\033[0m]: ");
+                    fflush(stdout);
+                }
+                else if (strstr(message, "GROUP_KICK_NOTIFICATION")) {
+                    printf("\r\033[K");
+                    display_group_kick_notification(message);
+                    printf("[\033[32mYou\033[0m]: ");
+                    fflush(stdout);
+                }
+
+                else if (strstr(message, "NEW_MESSAGE from") && strstr(message, trimmed_receiver)) {
                     char *msg_start = strstr(message, ": ");
                     if (msg_start) {
-                        msg_start += 2;  // Skip ": "
-                        printf("\r\033[K");  // Clear current line
+                        msg_start += 2;
+                        printf("\r\033[K");
                         printf("[\033[36m%s\033[0m]: %s\n", trimmed_receiver, msg_start);
                         printf("[\033[32mYou\033[0m]: ");
                         fflush(stdout);
                     }
                 }
-                // User not found
                 if (strstr(message, "303")) {
-                    printf("\r\033[K");  // Clear line
+                    printf("\r\033[K");
                     printf("User '%s' not found!\n", trimmed_receiver);
                     printf("[\033[32mYou\033[0m]: ");
                     fflush(stdout);
                 }
-                // User offline
                 if (strstr(message, "404")) {
-                    printf("\r\033[K");  // Clear line
+                    printf("\r\033[K");
                     printf("User '%s' is offline. Message will be delivered when they are online.\n", trimmed_receiver);
                     printf("[\033[32mYou\033[0m]: ");
                     fflush(stdout);
                 }
-                // Not friends
                 if (strstr(message, "403")) {
-                    printf("\r\033[K");  // Clear line
+                    printf("\r\033[K");
                     printf("You are not friends with '%s'. Cannot send message.\n", trimmed_receiver);
                     printf("[\033[32mYou\033[0m]: ");
                     fflush(stdout);
@@ -600,7 +819,6 @@ int handle_messaging_mode(ClientConn *client) {
             }
         }
         
-        // Check if there's user input from stdin
         if (FD_ISSET(STDIN_FILENO, &read_fds)) {
             if (fgets(input_buffer, sizeof(input_buffer), stdin) != NULL) {
                 size_t len = strlen(input_buffer);
@@ -609,35 +827,30 @@ int handle_messaging_mode(ClientConn *client) {
                     len--;
                 }
                 
-                // Check for exit command
                 if (strcmp(input_buffer, "exit") == 0) {
                     printf("\nExiting chat with %s...\n", trimmed_receiver);
                     break;
                 }
                 
-                // Skip empty messages
                 if (len == 0) {
                     printf("[\033[32mYou\033[0m]: ");
                     fflush(stdout);
                     continue;
                 }
                 
-                // Check message length
                 if (len > MAX_MESSAGE_LENGTH - 1) {
-                    printf("\r\033[K");  // Clear line
+                    printf("\r\033[K");
                     printf("Message too long! Maximum %d characters.\n", MAX_MESSAGE_LENGTH - 1);
                     printf("[\033[32mYou\033[0m]: ");
                     fflush(stdout);
                     continue;
                 }
                 
-                // Send message to server
                 char message[BUFFER_SIZE];
                 snprintf(message, BUFFER_SIZE, "MSG %s %s", trimmed_receiver, input_buffer);
                 send_message(client, message);
                 
-                // Display sent message
-                printf("\r\033[K");  // Clear line
+                printf("\r\033[K");
                 printf("[\033[32mYou\033[0m]: ");
                 fflush(stdout);
             }
@@ -822,14 +1035,10 @@ int main(int argc, char *argv[]) {
         check_server_messages(&global_client);
         
         print_main_menu();
-        
-        int choice;
-        if (scanf("%d", &choice) != 1) {
-            while (getchar() != '\n');
-            printf("Invalid input!\n");
-            continue;
+        int choice = get_menu_choice_with_notifications(&global_client);
+        if (choice < 0) {
+            break;
         }
-        while (getchar() != '\n');
 
         switch (choice) {
             case 1: { // Authentication
@@ -838,13 +1047,8 @@ int main(int argc, char *argv[]) {
                     check_server_messages(&global_client);
                     
                     print_auth_menu();
-                    int auth_choice;
-                    if (scanf("%d", &auth_choice) != 1) {
-                        while (getchar() != '\n');
-                        printf("Invalid input!\n");
-                        continue;
-                    }
-                    while (getchar() != '\n');
+                    int auth_choice = get_menu_choice_with_notifications(&global_client);
+                    if (auth_choice < 0) break;
                     
                     switch (auth_choice) {
                         case 1: handle_register(&global_client); break;
@@ -863,13 +1067,8 @@ int main(int argc, char *argv[]) {
                     check_server_messages(&global_client);
                     
                     print_friend_menu();
-                    int friend_choice;
-                    if (scanf("%d", &friend_choice) != 1) {
-                        while (getchar() != '\n');
-                        printf("Invalid input!\n");
-                        continue;
-                    }
-                    while (getchar() != '\n');
+                    int friend_choice = get_menu_choice_with_notifications(&global_client);
+                    if (friend_choice < 0) break;
                     
                     switch (friend_choice) {
                         case 1: handle_friend_req(&global_client); break;
@@ -895,14 +1094,8 @@ int main(int argc, char *argv[]) {
 					check_server_messages(&global_client);
 					
 					print_group_menu();
-                    int group_choice;
-                    if (scanf("%d", &group_choice) != 1) {
-                        while (getchar() != '\n');
-                        printf("Invalid input!\n");
-                        continue;
-                    }
-                    
-                    while (getchar() != '\n');
+                    int group_choice = get_menu_choice_with_notifications(&global_client);
+                    if (group_choice < 0) break;
                     
                     switch (group_choice) {
                         case 1: handle_group_create(&global_client); break;
