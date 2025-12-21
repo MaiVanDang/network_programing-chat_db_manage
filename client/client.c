@@ -37,6 +37,8 @@ void print_group_menu();
 void display_group_invite_notification(const char *message);
 void display_offline_notification(const char *message);
 void display_group_kick_notification(const char *message);
+void display_group_join_request_notification(const char *message);
+void display_group_join_result_notification(const char *message, int approved);
 
 // Handlers
 int handle_register(ClientConn *client);
@@ -198,6 +200,18 @@ int check_server_messages(ClientConn *client) {
             display_group_kick_notification(message);
             notification_count++;
         }
+        else if (strstr(message, "GROUP_JOIN_REQUEST_NOTIFICATION")) {
+            display_group_join_request_notification(message);
+            notification_count++;
+        }
+        else if (strstr(message, "GROUP_JOIN_APPROVED")) {
+            display_group_join_result_notification(message, 1);
+            notification_count++;
+        }
+        else if (strstr(message, "GROUP_JOIN_REJECTED")) {
+            display_group_join_result_notification(message, 0);
+            notification_count++;
+        }
         free(message);
     }
     
@@ -296,11 +310,14 @@ void print_group_menu() {
     printf("=== GROUP CHAT ===\n");
     printf("1. Create group\n");
     printf("2. Invite to group\n");
-    printf("3. Join group\n");
-    printf("4. Leave group\n");
-    printf("5. Kick from group\n");
-    printf("6. Send group message\n");
-    printf("7. Back to main menu\n");
+    printf("3. Request to join group\n");
+    printf("4. Approve join request\n");
+    printf("5. Reject join request\n");
+    printf("6. List join requests\n");
+    printf("7. Leave group\n");
+    printf("8. Kick from group\n");
+    printf("9. Send group message\n");
+    printf("10. Back to main menu\n");
     printf("==================\n");
 }
 
@@ -448,6 +465,87 @@ void display_group_kick_notification(const char *message) {
     printf("- Group: %s\n", group_name);
     printf("- ID: %d\n", group_id);
     printf("- Kicked by: %s\n", kicked_by);
+    printf("\n");
+}
+
+void display_group_join_request_notification(const char *message) {
+    int group_id = 0;
+    char group_name[128] = {0};
+    char requester[64] = {0};
+    
+    const char *id_start = strstr(message, "group_id=");
+    if (id_start) {
+        sscanf(id_start, "group_id=%d", &group_id);
+    }
+    
+    const char *name_start = strstr(message, "group_name=\"");
+    if (name_start) {
+        name_start += 12;
+        const char *name_end = strchr(name_start, '"');
+        if (name_end) {
+            int len = name_end - name_start;
+            if (len > 0 && len < sizeof(group_name)) {
+                strncpy(group_name, name_start, len);
+                group_name[len] = '\0';
+            }
+        }
+    }
+    
+    const char *req_start = strstr(message, "requester=\"");
+    if (req_start) {
+        req_start += 11;
+        const char *req_end = strchr(req_start, '"');
+        if (req_end) {
+            int len = req_end - req_start;
+            if (len > 0 && len < sizeof(requester)) {
+                strncpy(requester, req_start, len);
+                requester[len] = '\0';
+            }
+        }
+    }
+    
+    printf("\n");
+    printf("═══════════════════════════════════════════\n");
+    printf("   NEW GROUP JOIN REQUEST\n");
+    printf("═══════════════════════════════════════════\n");
+    printf("  Group: %s (ID: %d)\n", group_name, group_id);
+    printf("  From: %s\n", requester);
+    printf("───────────────────────────────────────────\n");
+    printf("  Use: GROUP_APPROVE %d %s\n", group_id, requester);
+    printf("   Or: GROUP_REJECT %d %s\n", group_id, requester);
+    printf("═══════════════════════════════════════════\n");
+}
+
+void display_group_join_result_notification(const char *message, int approved) {
+    int group_id = 0;
+    char group_name[128] = {0};
+    
+    const char *id_start = strstr(message, "group_id=");
+    if (id_start) {
+        sscanf(id_start, "group_id=%d", &group_id);
+    }
+    
+    const char *name_start = strstr(message, "group_name=\"");
+    if (name_start) {
+        name_start += 12;
+        const char *name_end = strchr(name_start, '"');
+        if (name_end) {
+            int len = name_end - name_start;
+            if (len > 0 && len < sizeof(group_name)) {
+                strncpy(group_name, name_start, len);
+                group_name[len] = '\0';
+            }
+        }
+    }
+    
+    printf("\n");
+    if (approved) {
+        printf("✓ JOIN REQUEST APPROVED\n");
+        printf("  You can now chat in group '%s' (ID: %d)\n", group_name, group_id);
+    } else {
+        printf("✗ JOIN REQUEST REJECTED\n");
+        printf("  Your request to join '%s' was rejected\n", group_name);
+    }
     printf("\n");
 }
 
@@ -694,7 +792,6 @@ int handle_friend_list(ClientConn *client) {
 // Messaging Handler
 // ============================================================================
 
-
 int handle_messaging_mode(ClientConn *client) {
     printf("\n--- DIRECT MESSAGING MODE ---\n");
     
@@ -912,9 +1009,22 @@ void handle_group_invite(ClientConn *client) {
 }
 
 void handle_group_join(ClientConn *client) {
-    /**
-    TO-DO 
-    */
+    printf("\n--- JOIN GROUP ---\n");
+    printf("Enter group name to join: ");
+    
+    char *group_name = read_line();
+    if (!group_name || strlen(group_name) == 0) {
+        printf("Group name cannot be empty!\n");
+        if (group_name) free(group_name);
+        return;
+    }
+    
+    char message[BUFFER_SIZE];
+    snprintf(message, BUFFER_SIZE, "GROUP_JOIN %s", group_name);
+    send_message(client, message);
+    
+    handle_server_response(client);
+    free(group_name);
 }
 
 void handle_group_leave(ClientConn *client) {
@@ -964,9 +1074,269 @@ void handle_group_kick(ClientConn *client) {
 }
 
 void handle_group_msg(ClientConn *client) {
-    /**
-    TO-DO 
-    */
+    printf("\n--- GROUP MESSAGING MODE ---\n");
+    
+    printf("Enter group name: ");
+    char *group_name = read_line();
+    if (!group_name || strlen(group_name) == 0) {
+        printf("Group name cannot be empty!\n");
+        if (group_name) free(group_name);
+        return;
+    }
+    
+    // Trim whitespace
+    char *trimmed_group = group_name;
+    while (*trimmed_group == ' ' || *trimmed_group == '\t') 
+        trimmed_group++;
+    
+    printf("\n--- Chatting in group: %s ---\n", trimmed_group);
+    printf("--- Type 'exit' to leave chat ---\n\n");
+    
+    printf("[\033[32mYou\033[0m]: ");
+    fflush(stdout);
+    
+    fd_set read_fds;
+    struct timeval timeout;
+    char input_buffer[MAX_MESSAGE_LENGTH];
+    
+    while (client->connected) {
+        FD_ZERO(&read_fds);
+        FD_SET(STDIN_FILENO, &read_fds);
+        FD_SET(client->sockfd, &read_fds);
+        
+        timeout.tv_sec = 1;
+        timeout.tv_usec = 0;
+        
+        int max_fd = (client->sockfd > STDIN_FILENO) ? client->sockfd : STDIN_FILENO;
+        
+        int activity = select(max_fd + 1, &read_fds, NULL, NULL, &timeout);
+        
+        if (activity < 0) {
+            perror("select() error");
+            break;
+        }
+        
+        // Xử lý tin nhắn từ server
+        if (FD_ISSET(client->sockfd, &read_fds)) {
+            char buffer[BUFFER_SIZE];
+            int bytes_received = recv(client->sockfd, buffer, sizeof(buffer) - 1, 0);
+            
+            if (bytes_received <= 0) {
+                if (bytes_received == 0) {
+                    printf("\nServer disconnected!\n");
+                } else {
+                    perror("recv() error");
+                }
+                client->connected = 0;
+                break;
+            }
+            
+            buffer[bytes_received] = '\0';
+            
+            if (!stream_buffer_append(client->recv_buffer, buffer, bytes_received)) {
+                fprintf(stderr, "Buffer overflow\n");
+                break;
+            }
+            
+            char *message;
+            while ((message = stream_buffer_extract_message(client->recv_buffer)) != NULL) {
+                
+                // Xử lý các notification
+                if (strstr(message, "GROUP_INVITE_NOTIFICATION")) {
+                    printf("\r\033[K");
+                    display_group_invite_notification(message);
+                    printf("[\033[32mYou\033[0m]: ");
+                    fflush(stdout);
+                }
+                else if (strstr(message, "OFFLINE_NOTIFICATION")) {
+                    printf("\r\033[K");
+                    display_offline_notification(message);
+                    printf("[\033[32mYou\033[0m]: ");
+                    fflush(stdout);
+                }
+                else if (strstr(message, "GROUP_KICK_NOTIFICATION")) {
+                    printf("\r\033[K");
+                    display_group_kick_notification(message);
+                    printf("[\033[32mYou\033[0m]: ");
+                    fflush(stdout);
+                    // Nếu bị kick khỏi nhóm đang chat, thoát
+                    if (strstr(message, trimmed_group)) {
+                        printf("\nYou have been kicked from this group. Exiting...\n");
+                        free(message);
+                        free(group_name);
+                        return;
+                    }
+                }
+                // Xử lý tin nhắn nhóm
+                else if (strstr(message, "GROUP_MSG")) {
+                    // Format: GROUP_MSG group_name sender: message_content
+                    char *group_start = strstr(message, "GROUP_MSG ");
+                    if (group_start) {
+                        group_start += 10; // Bỏ qua "GROUP_MSG "
+                        
+                        // Tìm tên nhóm (đến khi gặp space)
+                        char *space = strchr(group_start, ' ');
+                        if (space) {
+                            int group_len = space - group_start;
+                            char msg_group[128] = {0};
+                            strncpy(msg_group, group_start, group_len);
+                            
+                            // Kiểm tra xem có phải tin nhắn của nhóm này không
+                            if (strcmp(msg_group, trimmed_group) == 0) {
+                                // Tìm sender và message
+                                char *sender_start = space + 1;
+                                char *colon = strstr(sender_start, ": ");
+                                
+                                if (colon) {
+                                    int sender_len = colon - sender_start;
+                                    char sender[64] = {0};
+                                    strncpy(sender, sender_start, sender_len);
+                                    
+                                    char *msg_content = colon + 2;
+                                    
+                                    printf("\r\033[K");
+                                    printf("[\033[33m%s\033[0m]: %s\n", sender, msg_content);
+                                    printf("[\033[32mYou\033[0m]: ");
+                                    fflush(stdout);
+                                }
+                            }
+                        }
+                    }
+                }
+                // Xử lý các error codes
+                else if (strstr(message, "501")) {
+                    printf("\r\033[K");
+                    printf("Group '%s' not found!\n", trimmed_group);
+                    printf("[\033[32mYou\033[0m]: ");
+                    fflush(stdout);
+                }
+                else if (strstr(message, "502")) {
+                    printf("\r\033[K");
+                    printf("You are not a member of group '%s'!\n", trimmed_group);
+                    printf("[\033[32mYou\033[0m]: ");
+                    fflush(stdout);
+                }
+                
+                free(message);
+            }
+        }
+        
+        // Xử lý input từ user
+        if (FD_ISSET(STDIN_FILENO, &read_fds)) {
+            if (fgets(input_buffer, sizeof(input_buffer), stdin) != NULL) {
+                size_t len = strlen(input_buffer);
+                if (len > 0 && input_buffer[len - 1] == '\n') {
+                    input_buffer[len - 1] = '\0';
+                    len--;
+                }
+                
+                // Thoát khỏi chat
+                if (strcmp(input_buffer, "exit") == 0) {
+                    printf("\nExiting group chat %s...\n", trimmed_group);
+                    break;
+                }
+                
+                // Bỏ qua tin nhắn rỗng
+                if (len == 0) {
+                    printf("[\033[32mYou\033[0m]: ");
+                    fflush(stdout);
+                    continue;
+                }
+                
+                // Kiểm tra độ dài tin nhắn
+                if (len > MAX_MESSAGE_LENGTH - 1) {
+                    printf("\r\033[K");
+                    printf("Message too long! Maximum %d characters.\n", MAX_MESSAGE_LENGTH - 1);
+                    printf("[\033[32mYou\033[0m]: ");
+                    fflush(stdout);
+                    continue;
+                }
+                
+                // Gửi tin nhắn nhóm
+                char message[BUFFER_SIZE];
+                snprintf(message, BUFFER_SIZE, "GROUP_MSG %s %s", trimmed_group, input_buffer);
+                send_message(client, message);
+                
+                // In lại prompt
+                printf("\r\033[K");
+                printf("[\033[32mYou\033[0m]: ");
+                fflush(stdout);
+            }
+        }
+    }
+    
+    free(group_name);
+}
+
+void handle_group_approve(ClientConn *client) {
+    printf("\n--- APPROVE JOIN REQUEST ---\n");
+    printf("Enter group name: ");
+    char *group_name = read_line();
+    if (!group_name || strlen(group_name) == 0) {
+        printf("Group name cannot be empty!\n");
+    if (group_name) free(group_name);
+        return;
+    }
+    printf("Enter username to approve: ");
+    char *username = read_line();
+    if (!username || strlen(username) == 0) {
+        printf("Username cannot be empty!\n");
+        free(group_name);
+        if (username) free(username);
+        return;
+    }
+
+    char message[BUFFER_SIZE];
+    snprintf(message, BUFFER_SIZE, "GROUP_APPROVE %s %s", group_name, username);
+    send_message(client, message);
+
+    handle_server_response(client);
+    free(group_name);
+    free(username);
+}
+
+void handle_group_reject(ClientConn *client) {
+    printf("\n--- REJECT JOIN REQUEST ---\n");
+    printf("Enter group name: ");
+    char *group_name = read_line();
+    if (!group_name || strlen(group_name) == 0) {
+        printf("Group name cannot be empty!\n");
+        if (group_name) free(group_name);
+        return;
+    }
+    printf("Enter username to reject: ");
+    char *username = read_line();
+    if (!username || strlen(username) == 0) {
+        printf("Username cannot be empty!\n");
+        free(group_name);
+        if (username) free(username);
+        return;
+    }
+
+    char message[BUFFER_SIZE];
+    snprintf(message, BUFFER_SIZE, "GROUP_REJECT %s %s", group_name, username);
+    send_message(client, message);
+
+    handle_server_response(client);
+    free(group_name);
+    free(username);
+}
+
+void handle_list_join_requests(ClientConn *client) {
+    printf("\n--- LIST JOIN REQUESTS ---\n");
+    printf("Enter group name: ");
+    char *group_name = read_line();
+    if (!group_name || strlen(group_name) == 0) {
+        printf("Group name cannot be empty!\n");
+        if (group_name) free(group_name);
+        return;
+    }
+    char message[BUFFER_SIZE];
+    snprintf(message, BUFFER_SIZE, "LIST_JOIN_REQUESTS %s", group_name);
+    send_message(client, message);
+
+    handle_server_response(client);
+    free(group_name);
 }
 
 // ============================================================================
@@ -1101,10 +1471,13 @@ int main(int argc, char *argv[]) {
                         case 1: handle_group_create(&global_client); break;
                         case 2: handle_group_invite(&global_client); break;
                         case 3: handle_group_join(&global_client); break;
-                        case 4: handle_group_leave(&global_client); break;
-                        case 5: handle_group_kick(&global_client); break;
-                        case 6: handle_group_msg(&global_client); break;
-                        case 7: group_continue = 0; break;
+                        case 4: handle_group_approve(&global_client); break;
+                        case 5: handle_group_reject(&global_client); break;
+                        case 6: handle_list_join_requests(&global_client); break;
+                        case 7: handle_group_leave(&global_client); break;
+                        case 8: handle_group_kick(&global_client); break;
+                        case 9: handle_group_msg(&global_client); break;
+                        case 10: group_continue = 0; break;
                         default: printf("Invalid choice!\n");
                     }
 				}

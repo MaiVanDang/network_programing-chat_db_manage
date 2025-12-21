@@ -76,6 +76,8 @@ void server_handle_client_message(Server *server, ClientSession *client, const c
             break;
             
         case CMD_GROUP_JOIN:
+        	handle_group_join_command(server, client, cmd);
+            break;
         	
         case CMD_GROUP_LEAVE:
         	handle_group_leave_command(server, client, cmd);
@@ -86,6 +88,17 @@ void server_handle_client_message(Server *server, ClientSession *client, const c
             break;
             
         case CMD_GROUP_MSG:
+        	handle_group_msg_command(server, client, cmd);
+            break;
+        case CMD_GROUP_APPROVE:
+        	handle_group_approve_command(server, client, cmd);
+            break;
+        case CMD_GROUP_REJECT:
+        	handle_group_reject_command(server, client, cmd);
+            break;
+        case CMD_LIST_JOIN_REQUESTS:
+        	handle_list_join_requests_command(server, client, cmd);
+            break;
         case CMD_SEND_OFFLINE_MSG:
             {
                 char *response = build_response(500, "Command not implemented yet");
