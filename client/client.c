@@ -188,7 +188,49 @@ int check_server_messages(ClientConn *client) {
     int notification_count = 0;
     while ((message = stream_buffer_extract_message(client->recv_buffer)) != NULL) {
         
-        if (strstr(message, "GROUP_INVITE_NOTIFICATION")) {
+        if (strstr(message, "118")) {
+            printf("\n");
+            
+            char *msg_copy = strdup(message);
+            char *line = strtok(msg_copy, "\n");
+            line = strtok(NULL, "\n");
+            
+            while (line != NULL) {
+                if (line[0] == '[') {
+                    char *close_bracket = strchr(line, ']');
+                    if (close_bracket) {
+                        int ts_len = close_bracket - line - 1;
+                        char timestamp[64] = {0};
+                        if (ts_len > 0 && ts_len < 64) {
+                            strncpy(timestamp, line + 1, ts_len);
+                        }
+                        
+                        char *sender_start = close_bracket + 2;
+                        char *colon = strstr(sender_start, ": ");
+                        
+                        if (colon) {
+                            int sender_len = colon - sender_start;
+                            char sender[64] = {0};
+                            if (sender_len > 0 && sender_len < 64) {
+                                strncpy(sender, sender_start, sender_len);
+                            }
+                            
+                            char *msg_content = colon + 2;
+                            printf("\033[90m[%s]\033[0m [\033[33m%s\033[0m]: %s\n", 
+                                   timestamp, sender, msg_content);
+                        }
+                    }
+                } else if (strstr(line, "===")) {
+                    printf("%s\n", line);
+                }
+                
+                line = strtok(NULL, "\n");
+            }
+            
+            free(msg_copy);
+            notification_count++;
+        }
+        else if (strstr(message, "GROUP_INVITE_NOTIFICATION")) {
             display_group_invite_notification(message);
             notification_count++;
         } 
@@ -390,6 +432,10 @@ void display_offline_notification(const char *message) {
     if (id_start) {
         sscanf(id_start, "group_id=%d", &group_id);
     }
+
+    if (strcmp(type, "GROUP_MESSAGE") == 0) {
+        return;
+    }
     
     const char *sender_start = strstr(message, "sender=\"");
     if (sender_start) {
@@ -510,10 +556,6 @@ void display_group_join_request_notification(const char *message) {
     printf("═══════════════════════════════════════════\n");
     printf("  Group: %s (ID: %d)\n", group_name, group_id);
     printf("  From: %s\n", requester);
-    printf("───────────────────────────────────────────\n");
-    printf("  Use: GROUP_APPROVE %d %s\n", group_id, requester);
-    printf("   Or: GROUP_REJECT %d %s\n", group_id, requester);
-    printf("═══════════════════════════════════════════\n");
 }
 
 void display_group_join_result_notification(const char *message, int approved) {
@@ -540,11 +582,11 @@ void display_group_join_result_notification(const char *message, int approved) {
     
     printf("\n");
     if (approved) {
-        printf("✓ JOIN REQUEST APPROVED\n");
-        printf("  You can now chat in group '%s' (ID: %d)\n", group_name, group_id);
+        printf("JOIN REQUEST APPROVED\n");
+        printf("You can now chat in group '%s' (ID: %d)\n", group_name, group_id);
     } else {
-        printf("✗ JOIN REQUEST REJECTED\n");
-        printf("  Your request to join '%s' was rejected\n", group_name);
+        printf("JOIN REQUEST REJECTED\n");
+        printf("Your request to join '%s' was rejected\n", group_name);
     }
     printf("\n");
 }
@@ -1089,6 +1131,14 @@ void handle_group_msg(ClientConn *client) {
     while (*trimmed_group == ' ' || *trimmed_group == '\t') 
         trimmed_group++;
     
+    // Get offline messages first
+    char get_offline_cmd[BUFFER_SIZE];
+    snprintf(get_offline_cmd, sizeof(get_offline_cmd), "GROUP_SEND_OFFLINE_MSG %s", trimmed_group);
+    send_message(client, get_offline_cmd);
+
+    sleep(1);
+    check_server_messages(client);
+
     printf("\n--- Chatting in group: %s ---\n", trimmed_group);
     printf("--- Type 'exit' to leave chat ---\n\n");
     
@@ -1116,7 +1166,7 @@ void handle_group_msg(ClientConn *client) {
             break;
         }
         
-        // Xử lý tin nhắn từ server
+        // Handle messages from server
         if (FD_ISSET(client->sockfd, &read_fds)) {
             char buffer[BUFFER_SIZE];
             int bytes_received = recv(client->sockfd, buffer, sizeof(buffer) - 1, 0);
@@ -1141,7 +1191,7 @@ void handle_group_msg(ClientConn *client) {
             char *message;
             while ((message = stream_buffer_extract_message(client->recv_buffer)) != NULL) {
                 
-                // Xử lý các notification
+                // Handle notifications
                 if (strstr(message, "GROUP_INVITE_NOTIFICATION")) {
                     printf("\r\033[K");
                     display_group_invite_notification(message);
@@ -1157,33 +1207,33 @@ void handle_group_msg(ClientConn *client) {
                 else if (strstr(message, "GROUP_KICK_NOTIFICATION")) {
                     printf("\r\033[K");
                     display_group_kick_notification(message);
-                    printf("[\033[32mYou\033[0m]: ");
-                    fflush(stdout);
-                    // Nếu bị kick khỏi nhóm đang chat, thoát
+                    // If kicked from current group, exit
                     if (strstr(message, trimmed_group)) {
                         printf("\nYou have been kicked from this group. Exiting...\n");
                         free(message);
                         free(group_name);
                         return;
                     }
+                    printf("[\033[32mYou\033[0m]: ");
+                    fflush(stdout);
                 }
-                // Xử lý tin nhắn nhóm
+                // Handle group messages
                 else if (strstr(message, "GROUP_MSG")) {
                     // Format: GROUP_MSG group_name sender: message_content
                     char *group_start = strstr(message, "GROUP_MSG ");
                     if (group_start) {
-                        group_start += 10; // Bỏ qua "GROUP_MSG "
+                        group_start += 10; // Skip "GROUP_MSG "
                         
-                        // Tìm tên nhóm (đến khi gặp space)
+                        // Find group name (until space)
                         char *space = strchr(group_start, ' ');
                         if (space) {
                             int group_len = space - group_start;
                             char msg_group[128] = {0};
                             strncpy(msg_group, group_start, group_len);
                             
-                            // Kiểm tra xem có phải tin nhắn của nhóm này không
+                            // Check if it's for this group
                             if (strcmp(msg_group, trimmed_group) == 0) {
-                                // Tìm sender và message
+                                // Find sender and message
                                 char *sender_start = space + 1;
                                 char *colon = strstr(sender_start, ": ");
                                 
@@ -1203,7 +1253,7 @@ void handle_group_msg(ClientConn *client) {
                         }
                     }
                 }
-                // Xử lý các error codes
+                // Handle error codes
                 else if (strstr(message, "501")) {
                     printf("\r\033[K");
                     printf("Group '%s' not found!\n", trimmed_group);
@@ -1216,12 +1266,59 @@ void handle_group_msg(ClientConn *client) {
                     printf("[\033[32mYou\033[0m]: ");
                     fflush(stdout);
                 }
-                
+                else if (strstr(message, "118")) {
+                    // Parse và hiển thị các tin nhắn offline
+                    char *line = strtok(message, "\n");
+                    line = strtok(NULL, "\n"); // Skip status code line
+                    
+                    printf("\r\033[K"); // Clear current line
+                    
+                    while (line != NULL) {
+                        // Check if it's a message line: [timestamp] sender: content
+                        if (line[0] == '[') {
+                            // Extract timestamp
+                            char *close_bracket = strchr(line, ']');
+                            if (close_bracket) {
+                                char timestamp[32] = {0};
+                                int ts_len = close_bracket - line - 1;
+                                if (ts_len > 0 && ts_len < 32) {
+                                    strncpy(timestamp, line + 1, ts_len);
+                                }
+                                
+                                // Extract sender and message
+                                char *sender_start = close_bracket + 2; // Skip "] "
+                                char *colon = strstr(sender_start, ": ");
+                                
+                                if (colon) {
+                                    char sender[64] = {0};
+                                    int sender_len = colon - sender_start;
+                                    if (sender_len > 0 && sender_len < 64) {
+                                        strncpy(sender, sender_start, sender_len);
+                                    }
+                                    
+                                    char *msg_content = colon + 2;
+                                    
+                                    // Display message với format đẹp
+                                    printf("\033[90m[%s]\033[0m ", timestamp); // Gray timestamp
+                                    printf("[\033[33m%s\033[0m]: %s\n", sender, msg_content);
+                                }
+                            }
+                        } else {
+                            // Header hoặc footer lines
+                            printf("%s\n", line);
+                        }
+                        
+                        line = strtok(NULL, "\n");
+                    }
+                    
+                    printf("[\033[32mYou\033[0m]: ");
+                    fflush(stdout);
+                }
                 free(message);
             }
         }
         
-        // Xử lý input từ user
+        // Handle user input
         if (FD_ISSET(STDIN_FILENO, &read_fds)) {
             if (fgets(input_buffer, sizeof(input_buffer), stdin) != NULL) {
                 size_t len = strlen(input_buffer);
@@ -1230,20 +1327,20 @@ void handle_group_msg(ClientConn *client) {
                     len--;
                 }
                 
-                // Thoát khỏi chat
+                // Exit chat
                 if (strcmp(input_buffer, "exit") == 0) {
                     printf("\nExiting group chat %s...\n", trimmed_group);
                     break;
                 }
                 
-                // Bỏ qua tin nhắn rỗng
+                // Skip empty messages
                 if (len == 0) {
                     printf("[\033[32mYou\033[0m]: ");
                     fflush(stdout);
                     continue;
                 }
                 
-                // Kiểm tra độ dài tin nhắn
+                // Check message length
                 if (len > MAX_MESSAGE_LENGTH - 1) {
                     printf("\r\033[K");
                     printf("Message too long! Maximum %d characters.\n", MAX_MESSAGE_LENGTH - 1);
@@ -1252,12 +1349,12 @@ void handle_group_msg(ClientConn *client) {
                     continue;
                 }
                 
-                // Gửi tin nhắn nhóm
+                // Send group message
                 char message[BUFFER_SIZE];
                 snprintf(message, BUFFER_SIZE, "GROUP_MSG %s %s", trimmed_group, input_buffer);
                 send_message(client, message);
                 
-                // In lại prompt
+                // Reprint prompt
                 printf("\r\033[K");
                 printf("[\033[32mYou\033[0m]: ");
                 fflush(stdout);

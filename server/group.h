@@ -7,6 +7,7 @@ void handle_group_kick_command(Server *server, ClientSession *client, ParsedComm
 void handle_group_leave_command(Server *server, ClientSession *client, ParsedCommand *cmd);
 void handle_group_msg_command(Server *server, ClientSession *client, ParsedCommand *cmd);
 void handle_group_join_command(Server *server, ClientSession *client, ParsedCommand *cmd);
+void handle_get_group_offline_messages(Server *server, ClientSession *client, ParsedCommand *cmd);
 void handle_group_approve_command(Server *server, ClientSession *client, ParsedCommand *cmd);
 void handle_group_reject_command(Server *server, ClientSession *client, ParsedCommand *cmd);
 void handle_list_join_requests_command(Server *server, ClientSession *client, ParsedCommand *cmd);

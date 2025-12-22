@@ -90,6 +90,9 @@ void server_handle_client_message(Server *server, ClientSession *client, const c
         case CMD_GROUP_MSG:
         	handle_group_msg_command(server, client, cmd);
             break;
+        case CMD_GROUP_SEND_OFFLINE_MSG:
+        	handle_get_group_offline_messages(server, client, cmd);
+            break;
         case CMD_GROUP_APPROVE:
         	handle_group_approve_command(server, client, cmd);
             break;

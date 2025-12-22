@@ -86,6 +86,7 @@ CommandType parse_command_type(const char *cmd_str) {
     if (strcmp(cmd_str, "GROUP_LEAVE") == 0) return CMD_GROUP_LEAVE;
     if (strcmp(cmd_str, "GROUP_KICK") == 0) return CMD_GROUP_KICK;
     if (strcmp(cmd_str, "GROUP_MSG") == 0) return CMD_GROUP_MSG;
+    if (strcmp(cmd_str, "GROUP_SEND_OFFLINE_MSG") == 0) return CMD_GROUP_SEND_OFFLINE_MSG;
     if (strcmp(cmd_str, "GROUP_APPROVE") == 0) return CMD_GROUP_APPROVE;
     if (strcmp(cmd_str, "GROUP_REJECT") == 0) return CMD_GROUP_REJECT;
     if (strcmp(cmd_str, "LIST_JOIN_REQUESTS") == 0) return CMD_LIST_JOIN_REQUESTS;
@@ -165,6 +166,7 @@ ParsedCommand* parse_protocol_message(const char *raw_message) {
         case CMD_GROUP_JOIN:
         case CMD_GROUP_LEAVE:
         case CMD_LIST_JOIN_REQUESTS:
+        case CMD_GROUP_SEND_OFFLINE_MSG:
             token = strtok(NULL, " ");
             if (token) {
                 strncpy(cmd->group_name, token, MAX_USERNAME_LENGTH - 1);
