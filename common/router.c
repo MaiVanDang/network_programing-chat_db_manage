@@ -4,6 +4,7 @@
 #include "../server/auth.h"
 #include "../server/friend.h"
 #include "../server/message.h"
+#include "../helper/helper.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -17,8 +18,7 @@ void server_handle_client_message(Server *server, ClientSession *client, const c
     ParsedCommand *cmd = parse_protocol_message(message);
     if (!cmd) {
         char *response = build_simple_response(STATUS_UNDEFINED_ERROR);
-        server_send_response(client, response);
-        free(response);
+        send_and_free(client, response);
         return;
     }
     
@@ -105,16 +105,14 @@ void server_handle_client_message(Server *server, ClientSession *client, const c
         case CMD_SEND_OFFLINE_MSG:
             {
                 char *response = build_response(500, "Command not implemented yet");
-                server_send_response(client, response);
-                free(response);
+                send_and_free(client, response);
             }
             break;
             
         default:
             {
                 char *response = build_simple_response(STATUS_UNDEFINED_ERROR);
-                server_send_response(client, response);
-                free(response);
+                send_and_free(client, response);
             }
             break;
     }
