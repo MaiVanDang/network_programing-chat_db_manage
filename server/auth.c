@@ -1,8 +1,10 @@
 #include "../server/server.h"
 #include "../database/database.h"
+#include "../helper/helper.h"
 #include "../server/group.h"
 #include "friend.h"
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
@@ -111,6 +113,15 @@ int update_user_status(PGconn *conn, int user_id, int is_online) {
     return execute_query(conn, query);
 }
 
+bool check_auth(ClientSession *client) {
+    if (!client->is_authenticated) {
+        char *response = build_response(STATUS_NOT_LOGGED_IN, 
+            "NOT_LOGGED_IN - Please login first");
+        send_and_free(client, response);
+        return false;
+    }
+    return true;
+}
 // ============================================================================
 // Command Handlers
 // ============================================================================
@@ -120,38 +131,33 @@ void handle_register_command(Server *server, ClientSession *client, ParsedComman
     
     char *response = NULL;
     
-    if (client->is_authenticated) {
+    if (check_auth(client)) {
         response = build_response(STATUS_ALREADY_LOGGED_IN, "ALREADY_LOGGED_IN - Already logged in");
-        server_send_response(client, response);
-        free(response);
+        send_and_free(client, response);
         return;
     }
     
     if (cmd->param_count < 2) {
         response = build_response(STATUS_UNDEFINED_ERROR, "BAD_REQUEST - Username and password required");
-        server_send_response(client, response);
-        free(response);
+        send_and_free(client, response);
         return;
     }
     
     if (!validate_username(cmd->username)) {
         response = build_response(STATUS_INVALID_USERNAME, "INVALID_USERNAME - Username invalid");
-        server_send_response(client, response);
-        free(response);
+        send_and_free(client, response);
         return;
     }
     
     if (!validate_password(cmd->password)) {
         response = build_response(STATUS_INVALID_PASSWORD, "INVALID_PASSWORD - Password invalid");
-        server_send_response(client, response);
-        free(response);
+        send_and_free(client, response);
         return;
     }
     
     if (user_exists(server->db_conn, cmd->username)) {
         response = build_response(STATUS_USERNAME_EXISTS, "USERNAME_EXISTS - Username already exists");
-        server_send_response(client, response);
-        free(response);
+        send_and_free(client, response);
         return;
     }
     
@@ -159,13 +165,11 @@ void handle_register_command(Server *server, ClientSession *client, ParsedComman
         char msg[128];
         snprintf(msg, sizeof(msg), "Registration successful for %s", cmd->username);
         response = build_response(STATUS_REGISTER_OK, msg);
-        server_send_response(client, response);
-        free(response);
+        send_and_free(client, response);
         printf("New user registered: %s\n", cmd->username);
     } else {
         response = build_response(STATUS_DATABASE_ERROR, "UNKNOWN_ERROR - Failed to register user");
-        server_send_response(client, response);
-        free(response);
+        send_and_free(client, response);
     }
 }
 
@@ -174,24 +178,21 @@ void handle_login_command(Server *server, ClientSession *client, ParsedCommand *
     
     char *response = NULL;
     
-    if (client->is_authenticated) {
+    if (check_auth(client)) {
         response = build_response(STATUS_ALREADY_LOGGED_IN, "ALREADY_LOGGED_IN - Already logged in");
-        server_send_response(client, response);
-        free(response);
+        send_and_free(client, response);
         return;
     }
     
     if (cmd->param_count < 2) {
         response = build_response(STATUS_UNDEFINED_ERROR, "BAD_REQUEST - Username and password required");
-        server_send_response(client, response);
-        free(response);
+        send_and_free(client, response);
         return;
     }
     
     if (server_get_client_by_username(server, cmd->username)) {
         response = build_response(STATUS_ALREADY_LOGGED_IN, "ALREADY_LOGGED_IN - User already logged in from another session");
-        server_send_response(client, response);
-        free(response);
+        send_and_free(client, response);
         return;
     }
     
@@ -203,8 +204,7 @@ void handle_login_command(Server *server, ClientSession *client, ParsedCommand *
         } else {
             response = build_response(STATUS_USER_NOT_FOUND, "USER_NOT_FOUND - User does not exist");
         }
-        server_send_response(client, response);
-        free(response);
+        send_and_free(client, response);
         return;
     }
     
@@ -217,8 +217,7 @@ void handle_login_command(Server *server, ClientSession *client, ParsedCommand *
     char msg[128];
     snprintf(msg, sizeof(msg), "Welcome %s", cmd->username);
     response = build_response(STATUS_LOGIN_OK, msg);
-    server_send_response(client, response);
-    free(response);
+    send_and_free(client, response);
     
     printf("User logged in: %s (id=%d, fd=%d)\n", 
            cmd->username, user_id, client->socket_fd);
@@ -230,12 +229,7 @@ void handle_logout_command(Server *server, ClientSession *client, ParsedCommand 
     
     char *response = NULL;
     
-    if (!client->is_authenticated) {
-        response = build_response(STATUS_NOT_LOGGED_IN, "NOT_LOGGED_IN - Please login first");
-        server_send_response(client, response);
-        free(response);
-        return;
-    }
+    if (!check_auth(client)) return;
     
     update_user_status(server->db_conn, client->user_id, 0);
     
@@ -252,7 +246,5 @@ void handle_logout_command(Server *server, ClientSession *client, ParsedCommand 
     char msg[128];
     snprintf(msg, sizeof(msg), "Goodbye %s", username_copy);
     response = build_response(STATUS_LOGOUT_OK, msg);
-    server_send_response(client, response);
-    free(response);
+    send_and_free(client, response);
 }
-
