@@ -131,9 +131,10 @@ void handle_register_command(Server *server, ClientSession *client, ParsedComman
     
     char *response = NULL;
     
-    if (check_auth(client)) {
-        response = build_response(STATUS_ALREADY_LOGGED_IN, "ALREADY_LOGGED_IN - Already logged in");
-        send_and_free(client, response);
+    if (client->is_authenticated) {
+        response = build_simple_response(STATUS_ALREADY_LOGGED_IN);
+        server_send_response(client, response);
+        free(response);
         return;
     }
     
@@ -178,9 +179,10 @@ void handle_login_command(Server *server, ClientSession *client, ParsedCommand *
     
     char *response = NULL;
     
-    if (check_auth(client)) {
-        response = build_response(STATUS_ALREADY_LOGGED_IN, "ALREADY_LOGGED_IN - Already logged in");
-        send_and_free(client, response);
+    if (client->is_authenticated) {
+        response = build_simple_response(STATUS_ALREADY_LOGGED_IN);
+        server_send_response(client, response);
+        free(response);
         return;
     }
     
