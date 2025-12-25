@@ -1,66 +1,11 @@
-#include "../common/protocol.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <errno.h>
-#include <signal.h>
-#include <fcntl.h>
-
-#define BUFFER_SIZE 4096
-#define INITIAL_BUFFER_SIZE 64
-#define BUFFER_GROW_SIZE 32
+#include "client.h"
 
 // Global variable for signal handling
 int g_socket_fd = -1;
-
-typedef struct {
-    int sockfd;
-    StreamBuffer *recv_buffer;
-    int connected;
-} ClientConn;
-
 ClientConn global_client;
 
-// Function prototypes
-char* read_line();
-void send_message(ClientConn *client, const char *message);
-int handle_server_response(ClientConn *client);
-int check_server_messages(ClientConn *client);
-int get_menu_choice_with_notifications(ClientConn *client);
-void print_main_menu();
-void print_auth_menu();
-void print_friend_menu();
-void print_group_menu();
-void display_group_invite_notification(const char *message);
-void display_offline_notification(const char *message);
-void display_group_kick_notification(const char *message);
-void display_group_join_request_notification(const char *message);
-void display_group_join_result_notification(const char *message, int approved);
-
-// Handlers
-int handle_register(ClientConn *client);
-int handle_login(ClientConn *client);
-int handle_logout(ClientConn *client);
-int handle_friend_req(ClientConn *client);
-int handle_friend_accept(ClientConn *client);
-int handle_friend_decline(ClientConn *client);
-int handle_friend_remove(ClientConn *client);
-int handle_friend_list(ClientConn *client);
-int handle_send_message(ClientConn *client);
-void handle_group_create(ClientConn *client);
-void handle_group_invite(ClientConn *client);
-void handle_group_join(ClientConn *client);
-void handle_group_leave(ClientConn *client);
-void handle_group_kick(ClientConn *client);
-void handle_group_msg(ClientConn *client);
-
-void signal_handler(int signum);
-
 // ============================================================================
-// Utility Functions
+// Signal Handler
 // ============================================================================
 
 void signal_handler(int signum) {
@@ -71,6 +16,73 @@ void signal_handler(int signum) {
     }
     exit(0);
 }
+
+// ============================================================================
+// Initialization and Cleanup
+// ============================================================================
+
+/**
+ * @brief Initialize the client connection.
+ */
+int client_init(ClientConn *client, const char *server_addr, int port) {
+    struct sockaddr_in server_sockaddr;
+
+    client->sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (client->sockfd == -1) {
+        perror("socket() error");
+        return -1;
+    }
+
+    memset(&server_sockaddr, 0, sizeof(server_sockaddr));
+    server_sockaddr.sin_family = AF_INET;
+    server_sockaddr.sin_port = htons(port);
+    
+    if (inet_pton(AF_INET, server_addr, &server_sockaddr.sin_addr) <= 0) {
+        perror("inet_pton() error");
+        close(client->sockfd);
+        return -1;
+    }
+    
+    if (connect(client->sockfd, (struct sockaddr*)&server_sockaddr, sizeof(server_sockaddr)) < 0) {
+        perror("connect() error");
+        close(client->sockfd);
+        return -1;
+    }
+
+    client->recv_buffer = stream_buffer_create();
+    if (!client->recv_buffer) {
+        fprintf(stderr, "Failed to create stream buffer\n");
+        close(client->sockfd);
+        return -1;
+    }
+    
+    client->connected = 1;
+    g_socket_fd = client->sockfd;
+    
+    signal(SIGINT, signal_handler);
+    signal(SIGTERM, signal_handler);
+    
+    return 0;
+}
+
+/**
+ * @brief Clean up the client connection.
+ */
+void client_cleanup(ClientConn *client) {
+    if (client->recv_buffer) {
+        stream_buffer_destroy(client->recv_buffer);
+        client->recv_buffer = NULL;
+    }
+    if (client->sockfd >= 0) {
+        close(client->sockfd);
+        client->sockfd = -1;
+    }
+    client->connected = 0;
+}
+
+// ============================================================================
+// Input/Output Utilities
+// ============================================================================
 
 char* read_line() {
     size_t capacity = INITIAL_BUFFER_SIZE;
@@ -112,6 +124,15 @@ char* read_line() {
     return buffer;
 }
 
+static char* trim_whitespace(char *str) {
+    while (*str == ' ' || *str == '\t') str++;
+    return str;
+}
+
+// ============================================================================
+// Network Communication
+// ============================================================================
+
 void send_message(ClientConn *client, const char *message) {
     char buff[BUFFER_SIZE];
     snprintf(buff, BUFFER_SIZE, "%s%s", message, PROTOCOL_DELIMITER);
@@ -152,16 +173,25 @@ int handle_server_response(ClientConn *client) {
     return messages_processed > 0 ? 1 : 0;
 }
 
+static int set_socket_nonblocking(int sockfd, int nonblocking) {
+    int flags = fcntl(sockfd, F_GETFL, 0);
+    if (nonblocking) {
+        fcntl(sockfd, F_SETFL, flags | O_NONBLOCK);
+    } else {
+        fcntl(sockfd, F_SETFL, flags & ~O_NONBLOCK);
+    }
+    return flags;
+}
+
 int check_server_messages(ClientConn *client) {
     if (!client || !client->connected) return 0;
     
-    int flags = fcntl(client->sockfd, F_GETFL, 0);
-    fcntl(client->sockfd, F_SETFL, flags | O_NONBLOCK);
+    set_socket_nonblocking(client->sockfd, 1);
     
     char buffer[BUFFER_SIZE];
     int bytes_received = recv(client->sockfd, buffer, sizeof(buffer) - 1, 0);
     
-    fcntl(client->sockfd, F_SETFL, flags);
+    set_socket_nonblocking(client->sockfd, 0);
     
     if (bytes_received <= 0) {
         if (bytes_received == 0) {
@@ -190,7 +220,6 @@ int check_server_messages(ClientConn *client) {
         
         if (strstr(message, "118")) {
             printf("\n");
-            
             char *msg_copy = strdup(message);
             char *line = strtok(msg_copy, "\n");
             line = strtok(NULL, "\n");
@@ -363,45 +392,47 @@ void print_group_menu() {
     printf("==================\n");
 }
 
+// ============================================================================
+// Message Parsing Utilities
+// ============================================================================
+
+int parse_notification_field(const char *message, const char *field_name, char *output, size_t max_len) {
+    char search_str[128];
+    snprintf(search_str, sizeof(search_str), "%s=\"", field_name);
+    
+    const char *start = strstr(message, search_str);
+    if (!start) return 0;
+    
+    start += strlen(search_str);
+    const char *end = strchr(start, '"');
+    if (!end) return 0;
+    
+    int len = end - start;
+    if (len <= 0 || len >= (int)max_len) return 0;
+    
+    strncpy(output, start, len);
+    output[len] = '\0';
+    return 1;
+}
+
+// ============================================================================
+// Notification Handlers
+// ============================================================================
+
 void display_group_invite_notification(const char *message) {
     int group_id = 0;
     char group_name[128] = {0};
     char invited_by[64] = {0};
-    char notification_msg[512] = {0};
     
     const char *id_start = strstr(message, "group_id=");
     if (id_start) {
         sscanf(id_start, "group_id=%d", &group_id);
     }
     
-    const char *name_start = strstr(message, "group_name=\"");
-    if (name_start) {
-        name_start += 12;
-        const char *name_end = strchr(name_start, '"');
-        if (name_end) {
-            int len = name_end - name_start;
-            if (len > 0 && len < sizeof(group_name)) {
-                strncpy(group_name, name_start, len);
-                group_name[len] = '\0';
-            }
-        }
-    }
+    parse_notification_field(message, "group_name", group_name, sizeof(group_name));
+    parse_notification_field(message, "invited_by", invited_by, sizeof(invited_by));
     
-    const char *inviter_start = strstr(message, "invited_by=\"");
-    if (inviter_start) {
-        inviter_start += 12;
-        const char *inviter_end = strchr(inviter_start, '"');
-        if (inviter_end) {
-            int len = inviter_end - inviter_start;
-            if (len > 0 && len < sizeof(invited_by)) {
-                strncpy(invited_by, inviter_start, len);
-                invited_by[len] = '\0';
-            }
-        }
-    }
-    
-    printf("\n");
-    printf("NEW GROUP INVITATION: \n");
+    printf("\nNEW GROUP INVITATION: \n");
     printf("- Group: %s\n", group_name);
     printf("- ID: %d\n", group_id);
     printf("- Invited by: %s\n", invited_by);
@@ -410,61 +441,17 @@ void display_group_invite_notification(const char *message) {
 
 void display_offline_notification(const char *message) {
     char type[64] = {0};
-    int group_id = 0;
-    char sender[64] = {0};
     char notif_msg[512] = {0};
-    char time_str[64] = {0};
     
-    const char *type_start = strstr(message, "type=\"");
-    if (type_start) {
-        type_start += 6;
-        const char *type_end = strchr(type_start, '"');
-        if (type_end) {
-            int len = type_end - type_start;
-            if (len > 0 && len < sizeof(type)) {
-                strncpy(type, type_start, len);
-                type[len] = '\0';
-            }
-        }
-    }
-    
-    const char *id_start = strstr(message, "group_id=");
-    if (id_start) {
-        sscanf(id_start, "group_id=%d", &group_id);
-    }
+    parse_notification_field(message, "type", type, sizeof(type));
 
     if (strcmp(type, "GROUP_MESSAGE") == 0) {
         return;
     }
     
-    const char *sender_start = strstr(message, "sender=\"");
-    if (sender_start) {
-        sender_start += 8;
-        const char *sender_end = strchr(sender_start, '"');
-        if (sender_end) {
-            int len = sender_end - sender_start;
-            if (len > 0 && len < sizeof(sender)) {
-                strncpy(sender, sender_start, len);
-                sender[len] = '\0';
-            }
-        }
-    }
+    parse_notification_field(message, "message", notif_msg, sizeof(notif_msg));
     
-    const char *msg_start = strstr(message, "message=\"");
-    if (msg_start) {
-        msg_start += 9;
-        const char *msg_end = strchr(msg_start, '"');
-        if (msg_end) {
-            int len = msg_end - msg_start;
-            if (len > 0 && len < sizeof(notif_msg)) {
-                strncpy(notif_msg, msg_start, len);
-                notif_msg[len] = '\0';
-            }
-        }
-    }
-    
-    printf("\n");
-    printf("OFFLINE NOTIFICATION: \n");
+    printf("\nOFFLINE NOTIFICATION: \n");
     printf("- Message: %s\n", notif_msg);
     printf("\n");
 }
@@ -473,41 +460,16 @@ void display_group_kick_notification(const char *message) {
     int group_id = 0;
     char group_name[128] = {0};
     char kicked_by[64] = {0};
-    char notification_msg[512] = {0};
     
     const char *id_start = strstr(message, "group_id=");
     if (id_start) {
         sscanf(id_start, "group_id=%d", &group_id);
     }
     
-    const char *name_start = strstr(message, "group_name=\"");
-    if (name_start) {
-        name_start += 12;
-        const char *name_end = strchr(name_start, '"');
-        if (name_end) {
-            int len = name_end - name_start;
-            if (len > 0 && len < sizeof(group_name)) {
-                strncpy(group_name, name_start, len);
-                group_name[len] = '\0';
-            }
-        }
-    }
+    parse_notification_field(message, "group_name", group_name, sizeof(group_name));
+    parse_notification_field(message, "kicked_by", kicked_by, sizeof(kicked_by));
     
-    const char *kicker_start = strstr(message, "kicked_by=\"");
-    if (kicker_start) {
-        kicker_start += 11;
-        const char *kicker_end = strchr(kicker_start, '"');
-        if (kicker_end) {
-            int len = kicker_end - kicker_start;
-            if (len > 0 && len < sizeof(kicked_by)) {
-                strncpy(kicked_by, kicker_start, len);
-                kicked_by[len] = '\0';
-            }
-        }
-    }
-    
-    printf("\n");
-    printf("GROUP KICK NOTIFICATION: \n");
+    printf("\nGROUP KICK NOTIFICATION: \n");
     printf("- Group: %s\n", group_name);
     printf("- ID: %d\n", group_id);
     printf("- Kicked by: %s\n", kicked_by);
@@ -524,36 +486,12 @@ void display_group_join_request_notification(const char *message) {
         sscanf(id_start, "group_id=%d", &group_id);
     }
     
-    const char *name_start = strstr(message, "group_name=\"");
-    if (name_start) {
-        name_start += 12;
-        const char *name_end = strchr(name_start, '"');
-        if (name_end) {
-            int len = name_end - name_start;
-            if (len > 0 && len < sizeof(group_name)) {
-                strncpy(group_name, name_start, len);
-                group_name[len] = '\0';
-            }
-        }
-    }
+    parse_notification_field(message, "group_name", group_name, sizeof(group_name));
+    parse_notification_field(message, "requester", requester, sizeof(requester));
     
-    const char *req_start = strstr(message, "requester=\"");
-    if (req_start) {
-        req_start += 11;
-        const char *req_end = strchr(req_start, '"');
-        if (req_end) {
-            int len = req_end - req_start;
-            if (len > 0 && len < sizeof(requester)) {
-                strncpy(requester, req_start, len);
-                requester[len] = '\0';
-            }
-        }
-    }
-    
-    printf("\n");
-    printf("═══════════════════════════════════════════\n");
+    printf("\n╔═══════════════════════════════════════╗\n");
     printf("   NEW GROUP JOIN REQUEST\n");
-    printf("═══════════════════════════════════════════\n");
+    printf("╚═══════════════════════════════════════╝\n");
     printf("  Group: %s (ID: %d)\n", group_name, group_id);
     printf("  From: %s\n", requester);
 }
@@ -567,25 +505,14 @@ void display_group_join_result_notification(const char *message, int approved) {
         sscanf(id_start, "group_id=%d", &group_id);
     }
     
-    const char *name_start = strstr(message, "group_name=\"");
-    if (name_start) {
-        name_start += 12;
-        const char *name_end = strchr(name_start, '"');
-        if (name_end) {
-            int len = name_end - name_start;
-            if (len > 0 && len < sizeof(group_name)) {
-                strncpy(group_name, name_start, len);
-                group_name[len] = '\0';
-            }
-        }
-    }
+    parse_notification_field(message, "group_name", group_name, sizeof(group_name));
     
     printf("\n");
     if (approved) {
-        printf("JOIN REQUEST APPROVED\n");
+        printf("✓ JOIN REQUEST APPROVED\n");
         printf("You can now chat in group '%s' (ID: %d)\n", group_name, group_id);
     } else {
-        printf("JOIN REQUEST REJECTED\n");
+        printf("✗ JOIN REQUEST REJECTED\n");
         printf("Your request to join '%s' was rejected\n", group_name);
     }
     printf("\n");
@@ -1127,9 +1054,7 @@ void handle_group_msg(ClientConn *client) {
     }
     
     // Trim whitespace
-    char *trimmed_group = group_name;
-    while (*trimmed_group == ' ' || *trimmed_group == '\t') 
-        trimmed_group++;
+    char *trimmed_group = trim_whitespace(group_name);
     
     // Get offline messages first
     char get_offline_cmd[BUFFER_SIZE];
@@ -1446,69 +1371,35 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     
-    char *server_addr_str = argv[1];
+    char *server_addr = argv[1];
     int server_port = atoi(argv[2]);
 
-    int client_sock;
-    struct sockaddr_in server_addr;
-
-    if ((client_sock = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
-        perror("socket() error");
-        exit(1);
-    }
-
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(server_port);
-    
-    if (inet_pton(AF_INET, server_addr_str, &server_addr.sin_addr) <= 0) {
-        perror("inet_pton() error");
-        exit(1);
-    }
-    
-    if (connect(client_sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-        perror("connect() error");
-        exit(1);
+     if (client_init(&global_client, server_addr, server_port) < 0) {
+        fprintf(stderr, "Failed to initialize client\n");
+        return 1;
     }
 
     printf("\n========================================\n");
     printf("       Chat Client - Network Project\n");
     printf("========================================\n");
-    printf("Connected to server %s:%d\n", server_addr_str, server_port);
+    printf("Connected to server %s:%d\n", server_addr, server_port);
 
-    global_client.sockfd = client_sock;
-    global_client.recv_buffer = stream_buffer_create();
-    global_client.connected = 1;
-    g_socket_fd = client_sock;
-    
-    if (!global_client.recv_buffer) {
-        fprintf(stderr, "Failed to create stream buffer\n");
-        close(client_sock);
-        return 1;
-    }
-    
-    signal(SIGINT, signal_handler);
-    signal(SIGTERM, signal_handler);
-    
     printf("Waiting for welcome message...\n");
     if (handle_server_response(&global_client) <= 0) {
         fprintf(stderr, "Failed to receive welcome message\n");
-        stream_buffer_destroy(global_client.recv_buffer);
-        close(client_sock);
+        client_cleanup(&global_client);
         return 1;
     }
 
     while (global_client.connected) {
         check_server_messages(&global_client);
-        
         print_main_menu();
+        
         int choice = get_menu_choice_with_notifications(&global_client);
-        if (choice < 0) {
-            break;
-        }
+        if (choice < 0) break;
 
         switch (choice) {
-            case 1: { // Authentication
+            case MENU_AUTH: { // Authentication
                 int auth_continue = 1;
                 while (auth_continue && global_client.connected) {
                     check_server_messages(&global_client);
@@ -1527,8 +1418,8 @@ int main(int argc, char *argv[]) {
                 }
                 break;
             }
-            
-            case 2: { // Friend Management
+
+            case MENU_FRIEND: { // Friend Management
                 int friend_continue = 1;
                 while (friend_continue && global_client.connected) {
                     check_server_messages(&global_client);
@@ -1549,13 +1440,11 @@ int main(int argc, char *argv[]) {
                 }
                 break;
             }
-            
-            case 3: { // Send Message
+
+            case MENU_MESSAGE:
                 handle_messaging_mode(&global_client);
                 break;
-            }
-        
-            case 4: { // Group Chat
+            case MENU_GROUP: { // Group Chat
                 int group_continue = 1;
 				while(group_continue && global_client.connected) {
 					check_server_messages(&global_client);
@@ -1581,27 +1470,16 @@ int main(int argc, char *argv[]) {
                 break;
             }
             
-            case 5: // Exit
+            case MENU_EXIT:
                 printf("Closing connection...\n");
-                if (global_client.recv_buffer) {
-                    stream_buffer_destroy(global_client.recv_buffer);
-                }
-                close(client_sock);
+                client_cleanup(&global_client);
                 return 0;
-        
             default:
                 printf("Invalid choice!\n");
         }
-        
-        if (!global_client.connected) {
-            printf("Server disconnected. Exiting...\n");
-            break;
-        }
     }
 
-    if (global_client.recv_buffer) {
-        stream_buffer_destroy(global_client.recv_buffer);
-    }
-    close(client_sock);
+    client_cleanup(&global_client);
     return 0;
+    
 }
