@@ -15,7 +15,9 @@ typedef struct {
     int socket_fd;
     int user_id;
     char username[MAX_USERNAME_LENGTH];
+    char client_ip[INET_ADDRSTRLEN];
     int is_authenticated;
+    int last_response_code;
     StreamBuffer *recv_buffer;
     time_t last_activity;
 } ClientSession;
@@ -51,6 +53,10 @@ int server_accept_connection(Server *server);
 int server_receive_data(Server *server, ClientSession *client);
 int server_send_response(ClientSession *client, const char *response);
 int server_broadcast_to_group(Server *server, int group_id, const char *message, int exclude_fd);
+
+// Logging
+void log_activity(const char *username, const char *cmd_code, const char *cmd_detail, 
+                  const char *result_code, const char *result_detail);
 
 // Command handlers
 void server_handle_client_message(Server *server, ClientSession *client, const char *message);

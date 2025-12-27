@@ -8,6 +8,151 @@
 #define BUFFER_SIZE 8192
 
 // ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Kiểm tra authentication và gửi error response nếu chưa login
+ * Return: 1 nếu authenticated, 0 nếu không
+ */
+static int check_authentication(Server *server __attribute__((unused)), ClientSession *client) {
+    if (!client->is_authenticated) {
+        printf("ERROR: User not authenticated\n");
+        char *response = build_response(STATUS_NOT_LOGGED_IN, "NOT_LOGGED_IN - Please login first");
+        server_send_response(client, response);
+        free(response);
+        return 0;
+    }
+    return 1;
+}
+
+/**
+ * Gửi error response và log
+ */
+static void send_error_response(ClientSession *client, int status_code, const char *message, const char *log_msg) {
+    if (log_msg) {
+        printf("ERROR: %s\n", log_msg);
+    }
+    char *response = build_response(status_code, message);
+    server_send_response(client, response);
+    free(response);
+}
+
+/**
+ * Tìm user_id từ username
+ * Return: user_id nếu tìm thấy, -1 nếu không tìm thấy hoặc lỗi
+ */
+static int get_user_id_by_username(PGconn *conn, const char *username) {
+    if (!username || strlen(username) == 0) {
+        return -1;
+    }
+    
+    char query[512];
+    snprintf(query, sizeof(query),
+            "SELECT id FROM users WHERE username = '%s'",
+            username);
+    
+    PGresult *res = execute_query_with_result(conn, query);
+    if (!res || PQntuples(res) == 0) {
+        if (res) PQclear(res);
+        return -1;
+    }
+    
+    int user_id = atoi(PQgetvalue(res, 0, 0));
+    PQclear(res);
+    
+    return user_id;
+}
+
+/**
+ * Validate target user và kiểm tra xem có tồn tại không
+ * Return: user_id nếu valid, -1 nếu invalid (và đã gửi error response)
+ */
+int validate_target_user(Server *server, ClientSession *client, const char *username, const char *error_context) {
+    if (!username || strlen(username) == 0) {
+        send_error_response(client, STATUS_UNDEFINED_ERROR, 
+                          "Username required",
+                          "Username is empty");
+        return -1;
+    }
+    
+    int user_id = get_user_id_by_username(server->db_conn, username);
+    if (user_id < 0) {
+        char log_msg[256];
+        snprintf(log_msg, sizeof(log_msg), "%s '%s' not found", error_context, username);
+        send_error_response(client, STATUS_USER_NOT_FOUND,
+                          "User who you want to send does not exist",
+                          log_msg);
+        return -1;
+    }
+    
+    return user_id;
+}
+
+/**
+ * Mark nhiều messages là delivered
+ */
+int mark_messages_as_delivered(PGconn *conn, int *message_ids, int count) {
+    if (!conn || !message_ids || count <= 0) {
+        return 0;
+    }
+    
+    char query[512];
+    int success_count = 0;
+    
+    for (int i = 0; i < count; i++) {
+        snprintf(query, sizeof(query),
+                "UPDATE messages SET is_delivered = TRUE WHERE id = %d",
+                message_ids[i]);
+        
+        if (execute_query(conn, query)) {
+            success_count++;
+        } else {
+            printf("WARNING: Failed to mark message %d as delivered\n", message_ids[i]);
+        }
+    }
+    
+    printf("DEBUG: Marked %d/%d message(s) as delivered\n", success_count, count);
+    return success_count;
+}
+
+/**
+ * Mark một message cụ thể là delivered
+ */
+int mark_message_as_delivered(PGconn *conn, int sender_id, int receiver_id, const char *message_text) {
+    // Dùng parameterized query để tránh lỗi escape
+    const char *query = 
+            "UPDATE messages SET is_delivered = TRUE "
+            "WHERE id = ("
+            "    SELECT id FROM messages "
+            "    WHERE sender_id = $1 AND receiver_id = $2 "
+            "    AND content = $3 "
+            "    AND is_delivered = FALSE "
+            "    ORDER BY created_at DESC "
+            "    LIMIT 1"
+            ")";
+    
+    char sender_str[32], receiver_str[32];
+    snprintf(sender_str, sizeof(sender_str), "%d", sender_id);
+    snprintf(receiver_str, sizeof(receiver_str), "%d", receiver_id);
+    
+    const char *paramValues[3] = {sender_str, receiver_str, message_text};
+    
+    PGresult *res = PQexecParams(conn, query, 3, NULL, paramValues, NULL, NULL, 0);
+    int success = (PQresultStatus(res) == PGRES_COMMAND_OK);
+    
+    if (success) {
+        printf("DEBUG: Message marked as delivered in database\n");
+    } else {
+        printf("ERROR: Failed to update delivery status: %s\n", PQerrorMessage(conn));
+    }
+    
+    PQclear(res);
+    
+    return success;
+}
+
+// ============================================================================
 // MAIN HANDLER: Send Direct Message
 // ============================================================================
 
@@ -17,12 +162,8 @@ void handle_send_message(Server *server, ClientSession *client, ParsedCommand *c
     printf("\n=== HANDLE SEND MESSAGE ===\n");
     printf("DEBUG: From user '%s' (ID:%d)\n", client->username, client->user_id);
     
-    // Check login
-    if (!client->is_authenticated) {
-        printf("ERROR: User not authenticated\n");
-        response = build_response(STATUS_NOT_LOGGED_IN, "NOT_LOGGED_IN - Please login first");
-        server_send_response(client, response);
-        free(response);
+    // Check authentication
+    if (!check_authentication(server, client)) {
         return;
     }
     
@@ -32,78 +173,53 @@ void handle_send_message(Server *server, ClientSession *client, ParsedCommand *c
     printf("DEBUG: Target user: '%s'\n", receiver_username);
     printf("DEBUG: Message: '%s'\n", message_text);
     
-    // Check receiver username
-    if (!receiver_username || strlen(receiver_username) == 0) {
-        printf("ERROR: Receiver username is empty\n");
-        response = build_response(STATUS_UNDEFINED_ERROR, "UNDEFINED_ERROR - Receiver username required");
-        server_send_response(client, response);
-        free(response);
+    // Validate and get receiver ID
+    int receiver_id = validate_target_user(server, client, receiver_username, "Receiver");
+    if (receiver_id < 0) {
         return;
     }
-    
-    // Check if receiver exists (303 - USER_NOT_FOUND)
-    char query[BUFFER_SIZE];
-    snprintf(query, sizeof(query),
-            "SELECT id FROM users WHERE username = '%s'",
-            receiver_username);
-    
-    PGresult *res = execute_query_with_result(server->db_conn, query);
-    if (!res || PQntuples(res) == 0) {
-        if (res) PQclear(res);
-        printf("ERROR: User '%s' not found\n", receiver_username);
-        response = build_response(STATUS_USER_NOT_FOUND, "USER_NOT_FOUND - Receiver does not exist");
-        server_send_response(client, response);
-        free(response);
-        return;
-    }
-    
-    int receiver_id = atoi(PQgetvalue(res, 0, 0));
-    PQclear(res);
     printf("DEBUG: Found receiver '%s' with ID: %d\n", receiver_username, receiver_id);
     
     // Check not send message to yourself
     if (receiver_id == client->user_id) {
-        printf("ERROR: Cannot send message to yourself\n");
-        response = build_response(STATUS_UNDEFINED_ERROR, "UNDEFINED_ERROR - Cannot send message to yourself");
-        server_send_response(client, response);
-        free(response);
+        send_error_response(client, STATUS_UNDEFINED_ERROR,
+                          "Cannot send message to yourself",
+                          "Cannot send message to yourself");
         return;
     }
     
     // Check friendship (403 - NOT_FRIEND)
     if (!check_friendship(server->db_conn, client->user_id, receiver_id)) {
-        printf("ERROR: Users are not friends\n");
-        response = build_response(STATUS_NOT_FRIEND, "NOT_FRIEND - You must be friends to send messages");
-        server_send_response(client, response);
-        free(response);
+        send_error_response(client, STATUS_NOT_FRIEND,
+                          "You must be friends to send messages",
+                          "Users are not friends");
         return;
     }
     printf("DEBUG: Users are friends - OK\n");
     
     // Check message text is blank?
     if (!message_text || strlen(message_text) == 0) {
-        printf("ERROR: Message text is empty\n");
-        response = build_response(STATUS_UNDEFINED_ERROR, "UNDEFINED_ERROR - Message text required");
-        server_send_response(client, response);
-        free(response);
+        send_error_response(client, STATUS_UNDEFINED_ERROR,
+                          "Message text required",
+                          "Message text is empty");
         return;
     }
     
     // Check message length
     if (strlen(message_text) > MAX_MESSAGE_LENGTH - 1) {
-        printf("ERROR: Message too long (%zu bytes)\n", strlen(message_text));
-        response = build_response(STATUS_MESSAGE_TOO_LONG, "MESSAGE_TOO_LONG - Message exceeds maximum length");
-        server_send_response(client, response);
-        free(response);
+        char log_msg[128];
+        snprintf(log_msg, sizeof(log_msg), "Message too long (%zu bytes)", strlen(message_text));
+        send_error_response(client, STATUS_MESSAGE_TOO_LONG,
+                          "Message exceeds maximum length",
+                          log_msg);
         return;
     }
 
     // Save message to database 
     if (!save_message_to_database(server->db_conn, client->user_id, receiver_id, message_text)) {
-        printf("ERROR: Failed to save message to database\n");
-        response = build_response(STATUS_DATABASE_ERROR, "DATABASE_ERROR - Failed to save message");
-        server_send_response(client, response);
-        free(response);
+        send_error_response(client, STATUS_DATABASE_ERROR,
+                          "DATABASE_ERROR - Failed to save message",
+                          "Failed to save message to database");
         return;
     }
     printf("DEBUG: Message saved to database - OK\n");
@@ -117,38 +233,11 @@ void handle_send_message(Server *server, ClientSession *client, ParsedCommand *c
         forward_message_to_online_user(server, receiver_id, client->username, message_text);
         
         // Update message as delivered (receiver is online)
-        char update_query[BUFFER_SIZE];
-        char *escaped_msg = PQescapeLiteral(server->db_conn, message_text, strlen(message_text));
-        if (!escaped_msg) {
-            printf("ERROR: Failed to escape message text\n");
-            response = build_response(STATUS_MSG_OK, "OK - Message sent successfully (delivered)");
-        } else {
-            snprintf(update_query, sizeof(update_query),
-                    "UPDATE messages SET is_delivered = TRUE "
-                    "WHERE id = (SELECT id FROM messages "
-                    "WHERE sender_id = %d AND receiver_id = %d "
-                    "AND content = %s "
-                    "AND is_delivered = FALSE "
-                    "ORDER BY created_at DESC LIMIT 1)",
-                    client->user_id, receiver_id, escaped_msg);
-            
-            PGresult *update_res = PQexec(server->db_conn, update_query);
-            
-            if (PQresultStatus(update_res) == PGRES_COMMAND_OK) {
-                printf("DEBUG: Message marked as delivered in database\n");
-            } else {
-                printf("ERROR: Failed to update delivery status: %s\n", PQerrorMessage(server->db_conn));
-            }
-            
-            PQclear(update_res);
-            PQfreemem(escaped_msg);
-            
-            response = build_response(STATUS_MSG_OK, "OK - Message sent successfully (delivered)");
-        }
+        mark_message_as_delivered(server->db_conn, client->user_id, receiver_id, message_text);
+        response = build_response(STATUS_MSG_OK, "OK - Message sent successfully (delivered)");
     } else {
         // Receiver offline - Chỉ lưu database (is_read = FALSE by default)
         printf("DEBUG: Receiver is OFFLINE - Message saved for later\n");
-
         response = build_response(STATUS_OFFLINE_MSG_OK, "OK - Message sent successfully (stored for offline)");
     }
     
@@ -182,28 +271,26 @@ int check_friendship(PGconn *conn, int user_id1, int user_id2) {
 // Save message to database
 
 int save_message_to_database(PGconn *conn, int sender_id, int receiver_id, const char *message_text) {
-    char query[BUFFER_SIZE * 2];
+    // Dùng parameterized query để tránh SQL injection và lỗi escape
+    const char *query = "INSERT INTO messages (sender_id, receiver_id, content) VALUES ($1, $2, $3)";
     
-    // Escape message text để tránh SQL injection
-    char *escaped_message = PQescapeLiteral(conn, message_text, strlen(message_text));
-    if (!escaped_message) {
-        fprintf(stderr, "ERROR: Failed to escape message text\n");
+    // Chuyển int thành string
+    char sender_str[32], receiver_str[32];
+    snprintf(sender_str, sizeof(sender_str), "%d", sender_id);
+    snprintf(receiver_str, sizeof(receiver_str), "%d", receiver_id);
+    
+    const char *paramValues[3] = {sender_str, receiver_str, message_text};
+    
+    PGresult *res = PQexecParams(conn, query, 3, NULL, paramValues, NULL, NULL, 0);
+    
+    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+        fprintf(stderr, "ERROR: Failed to insert message into database: %s\n", PQerrorMessage(conn));
+        PQclear(res);
         return 0;
     }
     
-    snprintf(query, sizeof(query),
-            "INSERT INTO messages (sender_id, receiver_id, content) "
-            "VALUES (%d, %d, %s)",
-            sender_id, receiver_id, escaped_message);
-    
-    PQfreemem(escaped_message);
-    
-    int result = execute_query(conn, query);
-    if (!result) {
-        fprintf(stderr, "ERROR: Failed to insert message into database\n");
-    }
-    
-    return result;
+    PQclear(res);
+    return 1;
 }
 
 // Forward message to online user (realtime)
@@ -255,48 +342,23 @@ void handle_get_offline_messages(Server *server, ClientSession *client, ParsedCo
     printf("DEBUG: User '%s' (ID:%d) requesting offline messages\n", 
            client->username, client->user_id);
     
-    // Check login
-    if (!client->is_authenticated) {
-        printf("ERROR: User not authenticated\n");
-        response = build_response(STATUS_NOT_LOGGED_IN, "NOT_LOGGED_IN - Please login first");
-        server_send_response(client, response);
-        free(response);
+    // Check authentication
+    if (!check_authentication(server, client)) {
         return;
     }
     
-    // Lấy username của người gửi từ command
+    // Validate and get sender ID
     const char *sender_username = cmd->target_user;
-    if (!sender_username || strlen(sender_username) == 0) {
-        response = build_response(STATUS_UNDEFINED_ERROR, "BAD_REQUEST - Sender username required");
-        server_send_response(client, response);
-        free(response);
-        return;
-    }
-    
     printf("DEBUG: Fetching offline messages from '%s'\n", sender_username);
     
-    // Tìm sender_id
-    char query[512];
-    snprintf(query, sizeof(query),
-            "SELECT id FROM users WHERE username = '%s'",
-            sender_username);
-    
-    PGresult *res = execute_query_with_result(server->db_conn, query);
-    if (!res || PQntuples(res) == 0) {
-        if (res) PQclear(res);
-        printf("DEBUG: Sender '%s' not found\n", sender_username);
-        response = build_response(STATUS_USER_NOT_FOUND, "USER_NOT_FOUND - Sender does not exist");
-        server_send_response(client, response);
-        free(response);
+    int sender_id = validate_target_user(server, client, sender_username, "Sender");
+    if (sender_id < 0) {
         return;
     }
-    
-    int sender_id = atoi(PQgetvalue(res, 0, 0));
-    PQclear(res);
-    
     printf("DEBUG: Found sender '%s' with ID: %d\n", sender_username, sender_id);
     
     // Lấy tin nhắn chưa đọc (is_delivered = FALSE)
+    char query[512];
     snprintf(query, sizeof(query),
             "SELECT id, content, created_at "
             "FROM messages "
@@ -304,11 +366,11 @@ void handle_get_offline_messages(Server *server, ClientSession *client, ParsedCo
             "ORDER BY created_at ASC",
             sender_id, client->user_id);
     
-    res = execute_query_with_result(server->db_conn, query);
+    PGresult *res = execute_query_with_result(server->db_conn, query);
     if (!res) {
-        response = build_response(STATUS_DATABASE_ERROR, "UNKNOWN_ERROR - Failed to fetch offline messages");
-        server_send_response(client, response);
-        free(response);
+        send_error_response(client, STATUS_DATABASE_ERROR,
+                          "UNKNOWN_ERROR - Failed to fetch offline messages",
+                          "Database query failed");
         return;
     }
     
@@ -355,17 +417,7 @@ void handle_get_offline_messages(Server *server, ClientSession *client, ParsedCo
     PQclear(res);
     
     // Update is_delivered = TRUE cho tất cả tin nhắn đã gửi
-    for (int i = 0; i < id_count; i++) {
-        snprintf(query, sizeof(query),
-                "UPDATE messages SET is_delivered = TRUE WHERE id = %d",
-                message_ids[i]);
-        
-        if (!execute_query(server->db_conn, query)) {
-            printf("WARNING: Failed to mark message %d as delivered\n", message_ids[i]);
-        }
-    }
-    
-    printf("DEBUG: Marked %d message(s) as delivered\n", id_count);
+    mark_messages_as_delivered(server->db_conn, message_ids, id_count);
     
     // Gửi response
     response = build_response(STATUS_GET_OFFLINE_MSG_OK, message_list);

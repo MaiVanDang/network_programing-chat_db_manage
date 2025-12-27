@@ -124,14 +124,26 @@ char* read_line() {
     return buffer;
 }
 
-static char* trim_whitespace(char *str) {
-    while (*str == ' ' || *str == '\t') str++;
-    return str;
+// Extract message content without status code
+const char* extract_message_content(const char *message) {
+    if (!message) return message;
+    
+    // Skip status code (first number)
+    const char *ptr = message;
+    
+    // Skip leading digits (status code)
+    while (*ptr && (*ptr >= '0' && *ptr <= '9')) {
+        ptr++;
+    }
+    
+    // Skip space after status code
+    while (*ptr && (*ptr == ' ' || *ptr == '\t')) {
+        ptr++;
+    }
+    
+    // Return pointer to message content (or original if no status code found)
+    return (*ptr) ? ptr : message;
 }
-
-// ============================================================================
-// Network Communication
-// ============================================================================
 
 void send_message(ClientConn *client, const char *message) {
     char buff[BUFFER_SIZE];
@@ -165,7 +177,10 @@ int handle_server_response(ClientConn *client) {
     char *message;
     int messages_processed = 0;
     while ((message = stream_buffer_extract_message(client->recv_buffer)) != NULL) {
-        printf("[Server] %s\n", message);
+        const char *content = extract_message_content(message);
+        if (content && strlen(content) > 0) {
+            printf("[Server] %s\n", content);
+        }
         free(message);
         messages_processed++;
     }
@@ -217,6 +232,7 @@ int check_server_messages(ClientConn *client) {
     char *message;
     int notification_count = 0;
     while ((message = stream_buffer_extract_message(client->recv_buffer)) != NULL) {
+<<<<<<< Updated upstream
         
         if (strstr(message, "118")) {
             printf("\n");
@@ -282,6 +298,11 @@ int check_server_messages(ClientConn *client) {
         else if (strstr(message, "GROUP_JOIN_REJECTED")) {
             display_group_join_result_notification(message, 0);
             notification_count++;
+=======
+        const char *content = extract_message_content(message);
+        if (content && strlen(content) > 0) {
+            printf("[Server] %s\n", content);
+>>>>>>> Stashed changes
         }
         free(message);
     }
@@ -863,21 +884,43 @@ int handle_messaging_mode(ClientConn *client) {
                         fflush(stdout);
                     }
                 }
-                if (strstr(message, "303")) {
-                    printf("\r\033[K");
-                    printf("User '%s' not found!\n", trimmed_receiver);
+                // User not found
+                else if (strstr(message, "303")) {
+                    printf("\r\033[K");  // Clear line
+                    const char *content = extract_message_content(message);
+                    printf("%s\n", content);
                     printf("[\033[32mYou\033[0m]: ");
                     fflush(stdout);
                 }
-                if (strstr(message, "404")) {
-                    printf("\r\033[K");
-                    printf("User '%s' is offline. Message will be delivered when they are online.\n", trimmed_receiver);
+                // User offline
+                else if (strstr(message, "404")) {
+                    printf("\r\033[K");  // Clear line
+                    const char *content = extract_message_content(message);
+                    printf("%s\n", content);
                     printf("[\033[32mYou\033[0m]: ");
                     fflush(stdout);
                 }
-                if (strstr(message, "403")) {
-                    printf("\r\033[K");
-                    printf("You are not friends with '%s'. Cannot send message.\n", trimmed_receiver);
+                // Not friends
+                else if (strstr(message, "403")) {
+                    printf("\r\033[K");  // Clear line
+                    const char *content = extract_message_content(message);
+                    printf("%s\n", content);
+                    printf("[\033[32mYou\033[0m]: ");
+                    fflush(stdout);
+                }
+                // System error (e.g., cannot send to yourself)
+                else if (strstr(message, "500")) {
+                    printf("\r\033[K");  // Clear line
+                    const char *content = extract_message_content(message);
+                    printf("%s\n", content);
+                    printf("[\033[32mYou\033[0m]: ");
+                    fflush(stdout);
+                }
+                // Other errors (show message content)
+                else if (message[0] >= '4' && message[0] <= '5') {
+                    printf("\r\033[K");  // Clear line
+                    const char *content = extract_message_content(message);
+                    printf("%s\n", content);
                     printf("[\033[32mYou\033[0m]: ");
                     fflush(stdout);
                 }

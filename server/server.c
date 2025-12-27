@@ -16,6 +16,36 @@
 #include <time.h>
 
 // ============================================================================
+// Logging Functions
+// ============================================================================
+
+void log_activity(const char *username, const char *cmd_code, const char *cmd_detail, 
+                  const char *result_code, const char *result_detail) {
+    FILE *log_file = fopen("log.txt", "a");
+    if (!log_file) {
+        perror("Failed to open log.txt");
+        return;
+    }
+    
+    time_t now = time(NULL);
+    struct tm *tm_info = localtime(&now);
+    
+    char timestamp[32];
+    strftime(timestamp, sizeof(timestamp), "%d/%m/%Y %H:%M:%S", tm_info);
+    
+    // Format: [timestamp]$username$command_code:command_detail$result_code:result_detail
+    fprintf(log_file, "[%s]$%s$%s:%s$%s:%s\n", 
+            timestamp, 
+            username ? username : "Guest", 
+            cmd_code ? cmd_code : "UNKNOWN",
+            cmd_detail ? cmd_detail : "",
+            result_code ? result_code : "ERROR",
+            result_detail ? result_detail : "");
+    
+    fclose(log_file);
+}
+
+// ============================================================================
 // TASK 2
 // ============================================================================
 
@@ -36,6 +66,7 @@ Server* server_create(int port) {
         server->clients[i] = NULL;
     }
     
+    // Step 1: Contruct a TCP socket to listen connection request
     server->listen_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server->listen_fd < 0) {
         perror("Socket creation failed");
@@ -51,6 +82,7 @@ Server* server_create(int port) {
         return NULL;
     }
     
+    // Step 2: Bind address to socket
     struct sockaddr_in server_addr;
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
@@ -66,6 +98,7 @@ Server* server_create(int port) {
         return NULL;
     }
     
+    // Step 3: Listen request from clients
     if (listen(server->listen_fd, BACKLOG) < 0) {
         perror("Listen failed");
         close(server->listen_fd);
@@ -133,6 +166,7 @@ void server_run(Server *server) {
     while (server->running) {
         server->read_fds = server->master_set;
         
+        // Time to check server running status
         struct timeval timeout;
         timeout.tv_sec = 1;
         timeout.tv_usec = 0;
@@ -192,9 +226,18 @@ int server_accept_connection(Server *server) {
         return -1;
     }
     
+    // Store client IP in session
+    ClientSession *client = server_get_client_by_fd(server, client_fd);
+    if (client) {
+        strncpy(client->client_ip, client_ip, INET_ADDRSTRLEN - 1);
+        client->client_ip[INET_ADDRSTRLEN - 1] = '\0';
+    }
+    
     char *welcome = build_response(100, "Welcome to chat server");
-    server_send_response(server_get_client_by_fd(server, client_fd), welcome);
+    server_send_response(client, welcome);
     free(welcome);
+    
+    log_activity("Guest", "CONNECT", client_ip, "100", "Connection accepted");
     
     return client_fd;
 }
@@ -237,6 +280,12 @@ int server_receive_data(Server *server, ClientSession *client) {
 int server_send_response(ClientSession *client, const char *response) {
     if (!client || !response) return -1;
     
+    // Parse status code from response (format: "STATUS_CODE message\r\n")
+    int status_code = 0;
+    if (sscanf(response, "%d", &status_code) == 1) {
+        client->last_response_code = status_code;
+    }
+    
     int len = strlen(response);
     int sent = send(client->socket_fd, response, len, 0);
     
@@ -261,6 +310,8 @@ ClientSession* client_session_create(int socket_fd) {
     session->socket_fd = socket_fd;
     session->user_id = -1;
     session->is_authenticated = 0;
+    session->last_response_code = 0;
+    session->client_ip[0] = '\0';
     session->recv_buffer = stream_buffer_create();
     session->last_activity = time(NULL);
     

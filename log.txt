@@ -1,0 +1,69 @@
+
+[27/12/2025 20:57:38]$quan2k4$LOGIN:username=quan2k4$102:Success
+[27/12/2025 20:57:47]$dangbeo$LOGIN:username=dangbeo$102:Success
+[27/12/2025 20:58:10]$quan2k4$FRIEND_LIST:get_friend_list$108:Success
+[27/12/2025 21:04:08]$Guest$CONNECT:127.0.0.1$100:Connection accepted
+[27/12/2025 21:04:13]$Guest$CONNECT:127.0.0.1$100:Connection accepted
+[27/12/2025 21:04:19]$dangbeo$LOGIN:username=dangbeo$102:Success
+[27/12/2025 21:04:23]$quan2k4$LOGIN:username=quan2k4$102:Success
+[27/12/2025 21:04:36]$dangbeo$FRIEND_LIST:get_friend_list$108:Success
+[27/12/2025 21:04:53]$dangbeo$FRIEND_REQ:to=admin1$303:Client/Auth error
+[27/12/2025 21:06:23]$dangbeo$FRIEND_PENDING:list_pending_requests$117:Success
+[27/12/2025 21:06:28]$dangbeo$FRIEND_ACCEPT:from=quan2k3$303:Client/Auth error
+[27/12/2025 21:06:32]$dangbeo$FRIEND_PENDING:list_pending_requests$117:Success
+[27/12/2025 21:06:37]$dangbeo$FRIEND_DECLINE:from=3$303:Client/Auth error
+[27/12/2025 21:06:37]$dangbeo$FRIEND_LIST:get_friend_list$108:Success
+[27/12/2025 21:06:46]$dangbeo$FRIEND_REMOVE:user=quan2l4$303:Client/Auth error
+[27/12/2025 21:06:52]$dangbeo$FRIEND_LIST:get_friend_list$108:Success
+[27/12/2025 21:06:57]$dangbeo$FRIEND_REMOVE:user=quan2k4$107:Success
+[27/12/2025 21:07:02]$dangbeo$FRIEND_LIST:get_friend_list$108:Success
+[27/12/2025 21:13:00]$quan2k4$GET_OFFLINE_MSG:retrieve_offline_messages$218:Client/Auth error
+[27/12/2025 21:13:08]$quan2k4$MSG:to=quan2k4, len=2$500:System error
+[27/12/2025 21:15:53]$Guest$CONNECT:127.0.0.1$100:Connection accepted
+[27/12/2025 21:15:57]$quan2k4$LOGIN:username=quan2k4$102:Success
+[27/12/2025 21:16:03]$quan2k4$GET_OFFLINE_MSG:retrieve_offline_messages$303:Client/Auth error
+[27/12/2025 21:16:07]$quan2k4$MSG:to=quan2l4, len=2$0:Pending
+[27/12/2025 21:16:10]$quan2k4$MSG:to=quan2l4, len=2$0:Pending
+[27/12/2025 21:16:14]$quan2k4$GET_OFFLINE_MSG:retrieve_offline_messages$218:Client/Auth error
+[27/12/2025 21:16:17]$quan2k4$MSG:to=quan2k4, len=1$500:System error
+[27/12/2025 21:18:28]$Guest$CONNECT:127.0.0.1$100:Connection accepted
+[27/12/2025 21:18:32]$quan2k4$LOGIN:username=quan2k4$102:Success
+[27/12/2025 21:18:36]$quan2k4$FRIEND_LIST:get_friend_list$108:Success
+[27/12/2025 21:18:42]$quan2k4$GET_OFFLINE_MSG:retrieve_offline_messages$218:Client/Auth error
+[27/12/2025 21:18:44]$quan2k4$MSG:to=quan2k4, len=2$500:System error
+[27/12/2025 21:18:53]$quan2k4$MSG:to=quan2k4, len=14$0:Pending
+[27/12/2025 21:19:02]$quan2k4$GET_OFFLINE_MSG:retrieve_offline_messages$218:Client/Auth error
+[27/12/2025 21:19:04]$quan2k4$MSG:to=dangbeo, len=2$403:Database/Server error
+[27/12/2025 21:20:02]$Guest$CONNECT:127.0.0.1$100:Connection accepted
+[27/12/2025 21:20:08]$Guest$CONNECT:127.0.0.1$100:Connection accepted
+[27/12/2025 21:20:14]$dangbeo$LOGIN:username=dangbeo$102:Success
+[27/12/2025 21:20:19]$quan2k4$LOGIN:username=quan2k4$102:Success
+[27/12/2025 21:20:26]$quan2k4$GET_OFFLINE_MSG:retrieve_offline_messages$218:Client/Auth error
+[27/12/2025 21:20:30]$quan2k4$MSG:to=dangbeo, len=2$403:Database/Server error
+[27/12/2025 21:20:39]$quan2k4$FRIEND_REQ:to=dangbeo$104:Success
+[27/12/2025 21:20:47]$dangbeo$FRIEND_PENDING:list_pending_requests$117:Success
+[27/12/2025 21:20:54]$dangbeo$FRIEND_ACCEPT:from=quan2k4$105:Success
+[27/12/2025 21:20:59]$dangbeo$FRIEND_LIST:get_friend_list$108:Success
+[27/12/2025 21:21:08]$quan2k4$FRIEND_PENDING:list_pending_requests$117:Success
+[27/12/2025 21:21:11]$quan2k4$FRIEND_DECLINE:from=d$303:Client/Auth error
+[27/12/2025 21:24:42]$Guest$CONNECT:127.0.0.1$100:Connection accepted
+[27/12/2025 21:24:44]$Guest$CONNECT:127.0.0.1$100:Connection accepted
+[27/12/2025 21:25:03]$quan2k4$LOGIN:username=quan2k4$102:Success
+[27/12/2025 21:25:10]$dangbeo$LOGIN:username=dangbeo$102:Success
+[27/12/2025 21:25:19]$quan2k4$GET_OFFLINE_MSG:retrieve_offline_messages$218:Client/Auth error
+[27/12/2025 21:25:27]$dangbeo$GET_OFFLINE_MSG:retrieve_offline_messages$218:Client/Auth error
+[27/12/2025 21:25:29]$dangbeo$MSG:to=quan2k4, len=2$109:Success
+[27/12/2025 21:25:33]$quan2k4$MSG:to=dangbeo, len=7$109:Success
+[27/12/2025 21:25:37]$dangbeo$MSG:to=quan2k4, len=15$109:Success
+[27/12/2025 21:25:41]$dangbeo$MSG:to=quan2k4, len=11$0:Pending
+[27/12/2025 21:25:59]$quan2k4$GET_OFFLINE_MSG:retrieve_offline_messages$218:Client/Auth error
+[27/12/2025 21:26:01]$quan2k4$MSG:to=dangbeo, len=6$116:Success
+[27/12/2025 21:26:17]$quan2k4$MSG:to=dangbeo, len=28$0:Pending
+[27/12/2025 21:26:22]$Guest$CONNECT:127.0.0.1$100:Connection accepted
+[27/12/2025 21:26:26]$Guest$FRIEND_PENDING:list_pending_requests$305:Client/Auth error
+[27/12/2025 21:26:38]$Guest$FRIEND_ACCEPT:from=quan$0:Pending
+[27/12/2025 21:26:45]$Guest$GET_OFFLINE_MSG:retrieve_offline_messages$0:Pending
+[27/12/2025 21:26:56]$dangbeo$LOGIN:username=dangbeo$102:Success
+[27/12/2025 21:27:01]$dangbeo$GET_OFFLINE_MSG:retrieve_offline_messages$118:Success
+[27/12/2025 21:27:08]$dangbeo$MSG:to=quan2k4, len=2$109:Success
+[27/12/2025 21:27:09]$dangbeo$MSG:to=quan2k4, len=4$0:Pending
