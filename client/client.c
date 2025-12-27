@@ -230,84 +230,17 @@ int check_server_messages(ClientConn *client) {
     }
     
     char *message;
-    int notification_count = 0;
+    int messages_processed = 0;
     while ((message = stream_buffer_extract_message(client->recv_buffer)) != NULL) {
-<<<<<<< Updated upstream
-        
-        if (strstr(message, "118")) {
-            printf("\n");
-            char *msg_copy = strdup(message);
-            char *line = strtok(msg_copy, "\n");
-            line = strtok(NULL, "\n");
-            
-            while (line != NULL) {
-                if (line[0] == '[') {
-                    char *close_bracket = strchr(line, ']');
-                    if (close_bracket) {
-                        int ts_len = close_bracket - line - 1;
-                        char timestamp[64] = {0};
-                        if (ts_len > 0 && ts_len < 64) {
-                            strncpy(timestamp, line + 1, ts_len);
-                        }
-                        
-                        char *sender_start = close_bracket + 2;
-                        char *colon = strstr(sender_start, ": ");
-                        
-                        if (colon) {
-                            int sender_len = colon - sender_start;
-                            char sender[64] = {0};
-                            if (sender_len > 0 && sender_len < 64) {
-                                strncpy(sender, sender_start, sender_len);
-                            }
-                            
-                            char *msg_content = colon + 2;
-                            printf("\033[90m[%s]\033[0m [\033[33m%s\033[0m]: %s\n", 
-                                   timestamp, sender, msg_content);
-                        }
-                    }
-                } else if (strstr(line, "===")) {
-                    printf("%s\n", line);
-                }
-                
-                line = strtok(NULL, "\n");
-            }
-            
-            free(msg_copy);
-            notification_count++;
-        }
-        else if (strstr(message, "GROUP_INVITE_NOTIFICATION")) {
-            display_group_invite_notification(message);
-            notification_count++;
-        } 
-        else if (strstr(message, "OFFLINE_NOTIFICATION")) {
-            display_offline_notification(message);
-            notification_count++;
-        }
-        else if (strstr(message, "GROUP_KICK_NOTIFICATION")) {
-            display_group_kick_notification(message);
-            notification_count++;
-        }
-        else if (strstr(message, "GROUP_JOIN_REQUEST_NOTIFICATION")) {
-            display_group_join_request_notification(message);
-            notification_count++;
-        }
-        else if (strstr(message, "GROUP_JOIN_APPROVED")) {
-            display_group_join_result_notification(message, 1);
-            notification_count++;
-        }
-        else if (strstr(message, "GROUP_JOIN_REJECTED")) {
-            display_group_join_result_notification(message, 0);
-            notification_count++;
-=======
         const char *content = extract_message_content(message);
         if (content && strlen(content) > 0) {
             printf("[Server] %s\n", content);
->>>>>>> Stashed changes
         }
         free(message);
+        messages_processed++;
     }
     
-    return notification_count;
+    return messages_processed;
 }
 
 // ============================================================================
@@ -1097,7 +1030,9 @@ void handle_group_msg(ClientConn *client) {
     }
     
     // Trim whitespace
-    char *trimmed_group = trim_whitespace(group_name);
+    char *trimmed_group = group_name;
+    while (*trimmed_group == ' ' || *trimmed_group == '\t') 
+        trimmed_group++;
     
     // Get offline messages first
     char get_offline_cmd[BUFFER_SIZE];

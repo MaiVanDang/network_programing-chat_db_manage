@@ -67,3 +67,14 @@
 [27/12/2025 21:27:01]$dangbeo$GET_OFFLINE_MSG:retrieve_offline_messages$118:Success
 [27/12/2025 21:27:08]$dangbeo$MSG:to=quan2k4, len=2$109:Success
 [27/12/2025 21:27:09]$dangbeo$MSG:to=quan2k4, len=4$0:Pending
+[27/12/2025 22:06:38]$Guest$CONNECT:127.0.0.1$100:Connection accepted
+[27/12/2025 22:06:47]$quan2k4$LOGIN:username=quan2k4$102:Success
+[27/12/2025 22:07:04]$Guest$CONNECT:127.0.0.1$100:Connection accepted
+[27/12/2025 22:07:14]$dangbeo$LOGIN:username=dangbeo$102:Success
+[27/12/2025 22:07:27]$quan2k4$GET_OFFLINE_MSG:retrieve_offline_messages$218:Client/Auth error
+[27/12/2025 22:07:31]$dangbeo$GET_OFFLINE_MSG:retrieve_offline_messages$218:Client/Auth error
+[27/12/2025 22:07:35]$dangbeo$MSG:to=quan2k4, len=2$109:Success
+[27/12/2025 22:07:42]$dangbeo$MSG:to=quan2k4, len=16$400:Database/Server error
+[27/12/2025 22:07:48]$dangbeo$MSG:to=quan2k4, len=15$109:Success
+[27/12/2025 22:07:52]$dangbeo$MSG:to=quan2k4, len=11$0:Pending
+[27/12/2025 22:08:09]$quan2k4$FRIEND_LIST:get_friend_list$108:Success
