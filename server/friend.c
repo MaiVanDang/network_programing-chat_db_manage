@@ -10,9 +10,12 @@
 // ==================== Helper Functions ====================
 
 /**
- * Check user authentication
- * @return 1 if logged in, 0 if not (and sends error response)
- */
+ * @function validate_authentication: Check if user is authenticated.
+ * 
+ * @param client: Pointer to the client session to validate.
+ * 
+ * @return: 1 if user is logged in, 0 if not (and sends error response).
+ **/
 int validate_authentication(ClientSession *client) {
     if (!client->is_authenticated) {
         char *response = build_response(STATUS_NOT_LOGGED_IN, "NOT_LOGGED_IN - Please login first");
@@ -24,12 +27,14 @@ int validate_authentication(ClientSession *client) {
 }
 
 /**
- * Clean and normalize username from input
- * @param input - input string
- * @param output - buffer to store result (must have sufficient size)
- * @param max_len - maximum size of output buffer
- * @return 1 if successful, 0 if username is empty
- */
+ * @function clean_username: Clean and normalize username from input.
+ * 
+ * @param input: Input string to clean.
+ * @param output: Buffer to store cleaned result (must have sufficient size).
+ * @param max_len: Maximum size of output buffer.
+ * 
+ * @return: 1 if successful, 0 if username is empty.
+ **/
 int clean_username(const char *input, char *output, size_t max_len) {
     if (!input || strlen(input) == 0) {
         return 0;
@@ -51,12 +56,14 @@ int clean_username(const char *input, char *output, size_t max_len) {
 }
 
 /**
- * Get user_id from username
- * @param db_conn - database connection
- * @param username - username
- * @param user_id_out - pointer to store found user_id
- * @return 1 if found, 0 if not found
- */
+ * @function get_user_id_by_username: Get user ID from username.
+ * 
+ * @param db_conn: Database connection.
+ * @param username: Username to search for.
+ * @param user_id_out: Pointer to store found user ID.
+ * 
+ * @return: 1 if user found, 0 if not found.
+ **/
 int get_user_id_by_username(PGconn *db_conn, const char *username, int *user_id_out) {
     char query[512];
     snprintf(query, sizeof(query),
@@ -77,9 +84,14 @@ int get_user_id_by_username(PGconn *db_conn, const char *username, int *user_id_
 }
 
 /**
- * Check if user is trying to perform action on themselves
- * @return 1 if not self-action (OK), 0 if self-action (error)
- */
+ * @function check_not_self: Check if user is trying to perform action on themselves.
+ * 
+ * @param client: Pointer to the client session.
+ * @param target_user_id: Target user ID to check against.
+ * @param error_context: Error message context to display if self-action detected.
+ * 
+ * @return: 1 if not self-action (OK), 0 if self-action detected (error sent).
+ **/
 int check_not_self(ClientSession *client, int target_user_id, const char *error_context) {
     if (target_user_id == client->user_id) {
         char error_msg[256];
@@ -93,10 +105,15 @@ int check_not_self(ClientSession *client, int target_user_id, const char *error_
 }
 
 /**
- * Check friendship status between 2 users
- * @param status_filter - "accepted", "pending", or NULL (check all)
- * @return 1 if relationship exists with status_filter, 0 if not
- */
+ * @function check_friendship_status: Check friendship status between two users.
+ * 
+ * @param db_conn: Database connection.
+ * @param user_id1: First user ID.
+ * @param user_id2: Second user ID.
+ * @param status_filter: Status to filter by ("accepted", "pending", or NULL for all).
+ * 
+ * @return: 1 if relationship exists with specified status, 0 if not.
+ **/
 int check_friendship_status(PGconn *db_conn, int user_id1, int user_id2, const char *status_filter) {
     char query[512];
     
@@ -121,8 +138,14 @@ int check_friendship_status(PGconn *db_conn, int user_id1, int user_id2, const c
 }
 
 /**
- * Send error response with status code and message
- */
+ * @function send_error_response: Send error response to client.
+ * 
+ * @param client: Pointer to the client session.
+ * @param status_code: HTTP-style status code for the error.
+ * @param message: Error message to send.
+ * 
+ * @return: None (void function).
+ **/
 void send_error_response(ClientSession *client, int status_code, const char *message) {
     char *response = build_response(status_code, message);
     server_send_response(client, response);
@@ -552,7 +575,7 @@ void handle_friend_remove(Server *server, ClientSession *client, ParsedCommand *
  * @return: 0 if successful (sends friend list with online/offline status).
  *         1 if error occurs (not logged in or database error).
  **/
-void handle_friend_list(Server *server, ClientSession *client) {  // BỎ ParsedCommand *cmd
+void handle_friend_list(Server *server, ClientSession *client) {
     // Check if logged in
     if (!validate_authentication(client)) return;
     
