@@ -12,9 +12,13 @@
 // ============================================================================
 
 /**
- * Kiểm tra authentication và gửi error response nếu chưa login
- * Return: 1 nếu authenticated, 0 nếu không
- */
+ * @function check_authentication: Check if user is authenticated and send error response if not.
+ * 
+ * @param server: Pointer to Server structure (unused).
+ * @param client: Pointer to the client session to check.
+ * 
+ * @return: 1 if authenticated, 0 if not authenticated.
+ **/
 static int check_authentication(Server *server __attribute__((unused)), ClientSession *client) {
     if (!client->is_authenticated) {
         printf("ERROR: User not authenticated\n");
@@ -27,8 +31,15 @@ static int check_authentication(Server *server __attribute__((unused)), ClientSe
 }
 
 /**
- * Gửi error response và log
- */
+ * @function send_error_response: Send error response to client and log the error.
+ * 
+ * @param client: Pointer to the client session.
+ * @param status_code: HTTP-style status code for the error.
+ * @param message: Error message to send to client.
+ * @param log_msg: Optional log message for server console.
+ * 
+ * @return: None (void function).
+ **/
 static void send_error_response(ClientSession *client, int status_code, const char *message, const char *log_msg) {
     if (log_msg) {
         printf("ERROR: %s\n", log_msg);
@@ -39,9 +50,13 @@ static void send_error_response(ClientSession *client, int status_code, const ch
 }
 
 /**
- * Tìm user_id từ username
- * Return: user_id nếu tìm thấy, -1 nếu không tìm thấy hoặc lỗi
- */
+ * @function get_user_id_by_username: Get user ID from username.
+ * 
+ * @param conn: Database connection.
+ * @param username: Username to search for.
+ * 
+ * @return: User ID if found, -1 if not found or error.
+ **/
 static int get_user_id_by_username(PGconn *conn, const char *username) {
     if (!username || strlen(username) == 0) {
         return -1;
@@ -65,9 +80,15 @@ static int get_user_id_by_username(PGconn *conn, const char *username) {
 }
 
 /**
- * Validate target user và kiểm tra xem có tồn tại không
- * Return: user_id nếu valid, -1 nếu invalid (và đã gửi error response)
- */
+ * @function validate_target_user: Validate target user and check if they exist.
+ * 
+ * @param server: Pointer to Server structure managing database connection.
+ * @param client: Pointer to the client session.
+ * @param username: Username to validate.
+ * @param error_context: Context string for error messages.
+ * 
+ * @return: User ID if valid, -1 if invalid (and error response is sent).
+ **/
 static int validate_target_user(Server *server, ClientSession *client, const char *username, const char *error_context) {
     if (!username || strlen(username) == 0) {
         send_error_response(client, STATUS_UNDEFINED_ERROR, 
@@ -90,8 +111,14 @@ static int validate_target_user(Server *server, ClientSession *client, const cha
 }
 
 /**
- * Mark nhiều messages là delivered
- */
+ * @function mark_messages_as_delivered: Mark multiple messages as delivered in database.
+ * 
+ * @param conn: Database connection.
+ * @param message_ids: Array of message IDs to mark as delivered.
+ * @param count: Number of message IDs in the array.
+ * 
+ * @return: Number of messages successfully marked as delivered.
+ **/
 int mark_messages_as_delivered(PGconn *conn, int *message_ids, int count) {
     if (!conn || !message_ids || count <= 0) {
         return 0;
@@ -117,10 +144,17 @@ int mark_messages_as_delivered(PGconn *conn, int *message_ids, int count) {
 }
 
 /**
- * Mark một message cụ thể là delivered
- */
+ * @function mark_message_as_delivered: Mark a specific message as delivered.
+ * 
+ * @param conn: Database connection.
+ * @param sender_id: Sender's user ID.
+ * @param receiver_id: Receiver's user ID.
+ * @param message_text: Content of the message.
+ * 
+ * @return: 1 if successful, 0 if failed.
+ **/
 int mark_message_as_delivered(PGconn *conn, int sender_id, int receiver_id, const char *message_text) {
-    // Dùng parameterized query để tránh lỗi escape
+    // Use parameterized query to avoid escape errors
     const char *query = 
             "UPDATE messages SET is_delivered = TRUE "
             "WHERE id = ("
@@ -156,6 +190,15 @@ int mark_message_as_delivered(PGconn *conn, int sender_id, int receiver_id, cons
 // MAIN HANDLER: Send Direct Message
 // ============================================================================
 
+/**
+ * @function handle_send_message: Handle sending a direct message to another user.
+ * 
+ * @param server: Pointer to Server structure managing database and client connections.
+ * @param client: Pointer to the client session sending the message.
+ * @param cmd: Pointer to parsed command containing target user and message content.
+ * 
+ * @return: None (void function, sends response to client).
+ **/
 void handle_send_message(Server *server, ClientSession *client, ParsedCommand *cmd) {
     char *response = NULL;
     
@@ -247,8 +290,15 @@ void handle_send_message(Server *server, ClientSession *client, ParsedCommand *c
     printf("=== END HANDLE SEND MESSAGE ===\n\n");
 }
 
-// Check if two users are friends
-
+/**
+ * @function check_friendship: Check if two users are friends.
+ * 
+ * @param conn: Database connection.
+ * @param user_id1: First user's ID.
+ * @param user_id2: Second user's ID.
+ * 
+ * @return: 1 if they are friends (status = 'accepted'), 0 otherwise.
+ **/
 int check_friendship(PGconn *conn, int user_id1, int user_id2) {
     char query[512];
     snprintf(query, sizeof(query),
@@ -268,10 +318,18 @@ int check_friendship(PGconn *conn, int user_id1, int user_id2) {
     return is_friend;
 }
 
-// Save message to database
-
+/**
+ * @function save_message_to_database: Save a message to the database.
+ * 
+ * @param conn: Database connection.
+ * @param sender_id: Sender's user ID.
+ * @param receiver_id: Receiver's user ID.
+ * @param message_text: Content of the message.
+ * 
+ * @return: 1 if successful, 0 if failed.
+ **/
 int save_message_to_database(PGconn *conn, int sender_id, int receiver_id, const char *message_text) {
-    // Dùng parameterized query để tránh SQL injection và lỗi escape
+    // Use parameterized query to avoid SQL injection and escape errors
     const char *query = "INSERT INTO messages (sender_id, receiver_id, content) VALUES ($1, $2, $3)";
     
     // Chuyển int thành string
@@ -293,8 +351,16 @@ int save_message_to_database(PGconn *conn, int sender_id, int receiver_id, const
     return 1;
 }
 
-// Forward message to online user (realtime)
-
+/**
+ * @function forward_message_to_online_user: Forward message to an online user in real-time.
+ * 
+ * @param server: Pointer to Server structure to find client sessions.
+ * @param receiver_id: Receiver's user ID.
+ * @param sender_username: Sender's username for notification.
+ * @param message_text: Content of the message.
+ * 
+ * @return: 1 if message forwarded successfully, 0 if receiver is offline.
+ **/
 int forward_message_to_online_user(Server *server, int receiver_id, const char *sender_username, const char *message_text) {
     ClientSession *receiver_client = find_client_by_user_id(server, receiver_id);
     
@@ -322,6 +388,14 @@ int forward_message_to_online_user(Server *server, int receiver_id, const char *
 // HELPER: Find client session by user_id
 // ============================================================================
 
+/**
+ * @function find_client_by_user_id: Find a client session by user ID.
+ * 
+ * @param server: Pointer to Server structure containing client sessions.
+ * @param user_id: User ID to search for.
+ * 
+ * @return: Pointer to ClientSession if found, NULL otherwise.
+ **/
 ClientSession* find_client_by_user_id(Server *server, int user_id) {
     if (!server) return NULL;
     
@@ -335,6 +409,15 @@ ClientSession* find_client_by_user_id(Server *server, int user_id) {
     return NULL;  // Not found
 }
 
+/**
+ * @function handle_get_offline_messages: Handle retrieving offline messages from a specific sender.
+ * 
+ * @param server: Pointer to Server structure managing database connection.
+ * @param client: Pointer to the client session requesting offline messages.
+ * @param cmd: Pointer to parsed command containing sender's username.
+ * 
+ * @return: None (void function, sends messages to client).
+ **/
 void handle_get_offline_messages(Server *server, ClientSession *client, ParsedCommand *cmd) {
     char *response = NULL;
     
@@ -357,7 +440,7 @@ void handle_get_offline_messages(Server *server, ClientSession *client, ParsedCo
     }
     printf("DEBUG: Found sender '%s' with ID: %d\n", sender_username, sender_id);
     
-    // Lấy tin nhắn chưa đọc (is_delivered = FALSE)
+    // Get unread messages (is_delivered = FALSE)
     char query[512];
     snprintf(query, sizeof(query),
             "SELECT id, content, created_at "
@@ -387,15 +470,15 @@ void handle_get_offline_messages(Server *server, ClientSession *client, ParsedCo
     
     printf("DEBUG: Found %d offline message(s)\n", num_messages);
     
-    // Tạo response chứa tất cả tin nhắn
+    // Create response containing all messages
     char message_list[BUFFER_SIZE * 2];
     int offset = 0;
     
     offset += snprintf(message_list + offset, sizeof(message_list) - offset,
                       "\n=== OFFLINE MESSAGES FROM %s ===\n", sender_username);
     
-    // Lưu các message ID để update sau
-    int message_ids[100];  // Giới hạn tối đa 100 messages
+    // Store message IDs for update later
+    int message_ids[100];  // Maximum 100 messages
     int id_count = 0;
     
     for (int i = 0; i < num_messages && offset < (int)sizeof(message_list) - 500; i++) {
@@ -416,10 +499,10 @@ void handle_get_offline_messages(Server *server, ClientSession *client, ParsedCo
     
     PQclear(res);
     
-    // Update is_delivered = TRUE cho tất cả tin nhắn đã gửi
+    // Update is_delivered = TRUE for all sent messages
     mark_messages_as_delivered(server->db_conn, message_ids, id_count);
     
-    // Gửi response
+    // Send response
     response = build_response(STATUS_GET_OFFLINE_MSG_OK, message_list);
     server_send_response(client, response);
     free(response);
