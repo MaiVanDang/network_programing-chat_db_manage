@@ -68,7 +68,7 @@ static int get_user_id_by_username(PGconn *conn, const char *username) {
  * Validate target user và kiểm tra xem có tồn tại không
  * Return: user_id nếu valid, -1 nếu invalid (và đã gửi error response)
  */
-int validate_target_user(Server *server, ClientSession *client, const char *username, const char *error_context) {
+static int validate_target_user(Server *server, ClientSession *client, const char *username, const char *error_context) {
     if (!username || strlen(username) == 0) {
         send_error_response(client, STATUS_UNDEFINED_ERROR, 
                           "Username required",

@@ -175,7 +175,7 @@ int get_user_id(PGconn *conn, const char *username) {
 /**
  * @brief Validate target user exists
  */
-int validate_target_user(Server *server, ClientSession *client, 
+static int validate_target_user(Server *server, ClientSession *client, 
                                  const char *username) {
     if (!user_exists(server->db_conn, username)) {
         char *response = build_response(STATUS_USER_NOT_FOUND, 
