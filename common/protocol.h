@@ -1,7 +1,12 @@
+// ============================================================================
+// protocol.h - Updated
+// ============================================================================
+
 #ifndef PROTOCOL_H
 #define PROTOCOL_H
 
 #include <stddef.h>
+#include <string.h>
 
 // Protocol constants
 #define MAX_MESSAGE_LENGTH 4096
@@ -89,7 +94,8 @@ typedef enum {
     CMD_GROUP_LEAVE,
     CMD_GROUP_KICK,
     CMD_GROUP_MSG,
-    CMD_GROUP_SEND_OFFLINE_MSG,
+    CMD_GROUP_SEND_OFFLINE_MSG,      // Enter messaging mode
+    CMD_GROUP_EXIT_MESSAGING,        // Exit messaging mode (NEW)
     CMD_GROUP_APPROVE,
     CMD_GROUP_REJECT,
     CMD_LIST_JOIN_REQUESTS,

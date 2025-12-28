@@ -11,5 +11,6 @@ void handle_get_group_offline_messages(Server *server, ClientSession *client, Pa
 void handle_group_approve_command(Server *server, ClientSession *client, ParsedCommand *cmd);
 void handle_group_reject_command(Server *server, ClientSession *client, ParsedCommand *cmd);
 void handle_list_join_requests_command(Server *server, ClientSession *client, ParsedCommand *cmd);
+void handle_exit_group_messaging(Server *server, ClientSession *client, ParsedCommand *cmd);
 
 #endif

@@ -12,8 +12,14 @@
 // ============================================================================
 
 /**
- * @brief Check user is owner's group?
- */
+ * @function is_group_owner: Check if user is group owner
+ * 
+ * @param conn: Database connection
+ * @param group_id: Group ID
+ * @param user_id: User ID
+ * 
+ * @return true if user is owner, false otherwise
+ */ 
 int is_group_owner(PGconn *conn, int group_id, int user_id) {
     char query[512];
     snprintf(query, sizeof(query),
@@ -31,7 +37,12 @@ int is_group_owner(PGconn *conn, int group_id, int user_id) {
 }
 
 /**
- * @brief find group id 
+ * @function find_group_id: Find group ID by group name
+ * 
+ * @param conn: Database connection
+ * @param group_name: Group name
+ * 
+ * @return Group ID if found, -1 otherwise
  */
 int find_group_id(PGconn *conn, const char *group_name) {
     char query[256];
@@ -55,7 +66,16 @@ int find_group_id(PGconn *conn, const char *group_name) {
 }
 
 /**
- * @brief Store offline notification for user
+ * @funtion store_offline_notification: Store offline notification for user
+ * 
+ * @param db_conn: Database connection
+ * @param user_id: Target user ID
+ * @param group_id: Group ID
+ * @param owner: Owner username
+ * @param group_name: Group name
+ * @param status: "added" or "kicked"
+ * 
+ * @return true on success, false on failure
  */
 bool store_offline_notification(PGconn *db_conn, int user_id, int group_id, 
                                 const char *owner, const char *group_name, 
@@ -85,7 +105,20 @@ bool store_offline_notification(PGconn *db_conn, int user_id, int group_id,
 }
 
 /**
- * @brief Send notification to user (online or offline)
+ * @funtion send_notification: Send real-time notification or store offline
+ * 
+ * @param server: Server instance
+ * @param target_user_id: Target user ID
+ * @param username: Target username
+ * @param group_id: Group ID
+ * @param group_name: Group name
+ * @param sender: Sender username
+ * @param message: Notification message
+ * @param status_code: Notification status code
+ * @param notification_format: Notification format string
+ * @param offline_status: "added" or "kicked"
+ * 
+ * @return void
  */
 void send_notification(Server *server, int target_user_id, 
                                const char *username, int group_id,
@@ -118,13 +151,19 @@ void send_notification(Server *server, int target_user_id,
 }
 
 /**
- * @brief Validate and get group ID
+ * @function validate_and_get_group: Validate group name and get group ID
+ * 
+ * @param server: Server instance
+ * @param client: Client session
+ * @param group_name: Group name
+ * 
+ * @return Group ID if valid, -1 otherwise
  */
 int validate_and_get_group(Server *server, ClientSession *client, 
                                    const char *group_name) {
     if (!group_name) {
         char *response = build_response(STATUS_INVALID_GROUP_NAME, 
-            "INVALID_GROUP_NAME - Invalid group name");
+            "Invalid group name");
         send_and_free(client, response);
         return -1;
     }
@@ -132,7 +171,7 @@ int validate_and_get_group(Server *server, ClientSession *client,
     int group_id = find_group_id(server->db_conn, group_name);
     if (group_id < 0) {
         char *response = build_response(STATUS_GROUP_NOT_FOUND, 
-            "GROUP_NOT_FOUND - Group does not exist");
+            "Group does not exist");
         send_and_free(client, response);
         return -1;
     }
@@ -141,7 +180,14 @@ int validate_and_get_group(Server *server, ClientSession *client,
 }
 
 /**
- * @brief Check if user is group owner
+ * @function check_owner_permission: Check if client is group owner
+ * 
+ * @param server: Server instance
+ * @param client: Client session
+ * @param group_id: Group ID
+ * @param error_msg: Error message to send if not owner
+ * 
+ * @return true if owner, false otherwise
  */
 bool check_owner_permission(Server *server, ClientSession *client, 
                                     int group_id, const char *error_msg) {
@@ -154,7 +200,12 @@ bool check_owner_permission(Server *server, ClientSession *client,
 }
 
 /**
- * @brief Get user ID by username
+ * @function user_exists: Check if user exists by username
+ * 
+ * @param conn: Database connection
+ * @param username: Username
+ * 
+ * @return true if exists, false otherwise
  */
 int get_user_id(PGconn *conn, const char *username) {
     char query[512];
@@ -173,13 +224,19 @@ int get_user_id(PGconn *conn, const char *username) {
 }
 
 /**
- * @brief Validate target user exists
+ * @function validate_target_user: Validate target user by username
+ * 
+ * @param server: Server instance
+ * @param client: Client session
+ * @param username: Target username
+ * 
+ * @return Target user ID if valid, -1 otherwise
  */
 static int validate_target_user(Server *server, ClientSession *client, 
                                  const char *username) {
     if (!user_exists(server->db_conn, username)) {
         char *response = build_response(STATUS_USER_NOT_FOUND, 
-            "USER_NOT_FOUND - User does not exist");
+            "User does not exist");
         send_and_free(client, response);
         return -1;
     }
@@ -188,7 +245,14 @@ static int validate_target_user(Server *server, ClientSession *client,
 }
 
 /**
- * @brief Get group name by ID
+ * @function get_group_name: Get group name by group ID
+ * 
+ * @param conn: Database connection
+ * @param group_id: Group ID
+ * @param buffer: Buffer to store group name
+ * @param size: Size of buffer
+ * 
+ * @return true if found, false otherwise
  */
 bool get_group_name(PGconn *conn, int group_id, char *buffer, size_t size) {
     char query[256];
@@ -213,7 +277,12 @@ bool get_group_name(PGconn *conn, int group_id, char *buffer, size_t size) {
 // ============================================================================
 
 /**
- * @brief Check user in group?
+ * @function is_in_group: Check if user is in group
+ * @param conn: Database connection
+ * @param group_id: Group ID
+ * @param user_id: User ID
+ * 
+ * @return true if user is in group, false otherwise
  */
 int is_in_group(PGconn *conn, int group_id, int user_id) {
     char query[512];
@@ -232,8 +301,13 @@ int is_in_group(PGconn *conn, int group_id, int user_id) {
 }
 
 /**
- * @brief Create a join request for a group
- * @return 0 on success, -1 on error, -2 if pending request exists
+ * @function create_join_request: Create a join request for a group
+ * 
+ * @param conn: Database connection
+ * @param group_id: Group ID
+ * @param user_id: User ID
+ * 
+ * @return 0 on success, -1 on failure, -2 if pending request exists
  */
 int create_join_request(PGconn *conn, int group_id, int user_id) {
     if (!conn) return -1;
@@ -266,7 +340,12 @@ int create_join_request(PGconn *conn, int group_id, int user_id) {
 }
 
 /**
- * @brief Get group owner user_id
+ * @function get_group_owner_id: Get group owner user ID
+ * 
+ * @param conn: Database connection
+ * @param group_id: Group ID
+ * 
+ * @return Owner user ID, -1 if not found
  */
 int get_group_owner_id(PGconn *conn, int group_id) {
     char query[512];
@@ -286,7 +365,12 @@ int get_group_owner_id(PGconn *conn, int group_id) {
 }
 
 /**
- * @brief Get username by user_id
+ * @function get_username_by_id: Get username by user ID
+ * 
+ * @param conn: Database connection
+ * @param user_id: User ID
+ * 
+ * @return Username string (must be freed), NULL if not found
  */
 char* get_username_by_id(PGconn *conn, int user_id) {
     char query[256];
@@ -305,7 +389,14 @@ char* get_username_by_id(PGconn *conn, int user_id) {
 }
 
 /**
- * @brief Store join request notification for owner
+ * @function store_join_request_notification: Store join request notification
+ * 
+ * @param db_conn: Database connection
+ * @param owner_id: Group owner user ID
+ * @param group_id: Group ID
+ * @param requester: Requester username
+ * @param group_name: Group name
+ * 
  * @return true on success, false on failure
  */
 bool store_join_request_notification(PGconn *db_conn, int owner_id, int group_id,
@@ -333,6 +424,15 @@ bool store_join_request_notification(PGconn *db_conn, int owner_id, int group_id
 // TASK 4: Create group
 // ============================================================================
 
+/**
+ * @function create_group: Create a new group
+ * 
+ * @param conn: Database connection
+ * @param group_name: Group name
+ * @param creator_id: Creator user ID
+ * 
+ * @return Group ID if successful, -1 on failure, -2 if name exists
+ */
 int create_group(PGconn *conn, const char *group_name, int creator_id) {
     if (!conn || !group_name || creator_id <= 0) return -1;
     
@@ -374,8 +474,13 @@ int create_group(PGconn *conn, const char *group_name, int creator_id) {
 }
 
 /**
- * @brief Handle GROUP_CREATE command
- * Format: GROUP_CREATE <group_name>
+ * @function handle_group_create_command: Handle group creation command
+ * 
+ * @param server: Server instance
+ * @param client: Client session
+ * @param cmd: Parsed command
+ * 
+ * @return void
  */
 void handle_group_create_command(Server *server, ClientSession *client, ParsedCommand *cmd) {
     if (!server || !client || !cmd) return;
@@ -386,14 +491,14 @@ void handle_group_create_command(Server *server, ClientSession *client, ParsedCo
     
     if (cmd->param_count < 1 || strlen(cmd->group_name) == 0) {
         response = build_response(STATUS_UNDEFINED_ERROR, 
-            "BAD_REQUEST - Group name required");
+            "Group name required");
         send_and_free(client, response);
         return;
     }
     
     if (strlen(cmd->group_name) < 3 || strlen(cmd->group_name) > 50) {
         response = build_response(STATUS_UNDEFINED_ERROR, 
-            "BAD_REQUEST - Group name must be 3-50 characters");
+            "Group name must be 3-50 characters");
         send_and_free(client, response);
         return;
     }
@@ -403,14 +508,14 @@ void handle_group_create_command(Server *server, ClientSession *client, ParsedCo
     
     if (group_id == -2) {
         response = build_response(STATUS_GROUP_EXISTS,
-            "GROUP_EXISTS - Group name already exists");
+            "Group name already exists");
         send_and_free(client, response);
         return;
     }
     
     if (group_id < 0) {
         response = build_response(STATUS_DATABASE_ERROR, 
-            "UNKNOWN_ERROR - Failed to create group");
+            "Failed to create group");
         send_and_free(client, response);
         return;
     }
@@ -430,7 +535,13 @@ void handle_group_create_command(Server *server, ClientSession *client, ParsedCo
 // ============================================================================
 
 /**
- * @brief add user to group
+ * @function add_user_to_group: Add user to group as member
+ * 
+ * @param conn: Database connection
+ * @param group_id: Group ID
+ * @param user_id: User ID
+ * 
+ * @return true on success, false on failure
  */
 int add_user_to_group(PGconn *conn, int group_id, int user_id) {
     char query[512];
@@ -442,8 +553,13 @@ int add_user_to_group(PGconn *conn, int group_id, int user_id) {
 }
 
 /**
- * @brief Handle GROUP_INVITE command
- * Format: GROUP_INVITE <group_name> <username>
+ * @function handle_group_invite_command: Handle group invite command
+ * 
+ * @param server: Server instance
+ * @param client: Client session
+ * @param cmd: Parsed command
+ * 
+ * @return void
  */
 void handle_group_invite_command(Server *server, ClientSession *client, ParsedCommand *cmd) {
     if (!server || !client || !cmd) return;
@@ -454,7 +570,7 @@ void handle_group_invite_command(Server *server, ClientSession *client, ParsedCo
     
     if (cmd->param_count < 2) {
         response = build_response(STATUS_UNDEFINED_ERROR, 
-            "BAD_REQUEST - Group name and username required");
+            "Group name and username required");
         send_and_free(client, response);
         return;
     }
@@ -463,21 +579,21 @@ void handle_group_invite_command(Server *server, ClientSession *client, ParsedCo
     if (group_id < 0) return;
     
     if (!check_owner_permission(server, client, group_id,
-            "NOT_GROUP_OWNER - Only group owner can invite members")) return;
+            "Only group owner can invite members")) return;
     
     int target_user_id = validate_target_user(server, client, cmd->target_user);
     if (target_user_id < 0) return;
     
     if (is_in_group(server->db_conn, group_id, target_user_id)) {
         response = build_response(STATUS_ALREADY_IN_GROUP, 
-            "ALREADY_IN_GROUP - User already in group");
+            "User already in group");
         send_and_free(client, response);
         return;
     }
     
     if (!add_user_to_group(server->db_conn, group_id, target_user_id)) {
         response = build_response(STATUS_DATABASE_ERROR, 
-            "UNKNOWN_ERROR - Failed to add user to group");
+            "Failed to add user to group");
         send_and_free(client, response);
         return;
     }
@@ -518,7 +634,13 @@ void handle_group_invite_command(Server *server, ClientSession *client, ParsedCo
 // ============================================================================
 
 /**
- * @brief remove user from group
+ * @function remove_user_from_group: Remove user from group
+ * 
+ * @param conn: Database connection
+ * @param group_id: Group ID
+ * @param user_id: User ID
+ * 
+ * @return true on success, false on failure
  */
 int remove_user_from_group(PGconn *conn, int group_id, int user_id) {
     char query[512];
@@ -530,8 +652,13 @@ int remove_user_from_group(PGconn *conn, int group_id, int user_id) {
 }
 
 /**
- * @brief Handle GROUP_KICK command
- * Format: GROUP_KICK <group_name> <username>
+ * @function handle_group_kick_command: Handle group kick command
+ * 
+ * @param server: Server instance
+ * @param client: Client session
+ * @param cmd: Parsed command
+ * 
+ * @return void
  */
 void handle_group_kick_command(Server *server, ClientSession *client, ParsedCommand *cmd) {
     if (!server || !client || !cmd) return;
@@ -542,7 +669,7 @@ void handle_group_kick_command(Server *server, ClientSession *client, ParsedComm
     
     // Check parameters
     if (cmd->param_count < 2) {
-        response = build_response(STATUS_UNDEFINED_ERROR, "BAD_REQUEST - Group name and username required");
+        response = build_response(STATUS_UNDEFINED_ERROR, "Group name and username required");
         send_and_free(client, response);
         return;
     }
@@ -551,14 +678,14 @@ void handle_group_kick_command(Server *server, ClientSession *client, ParsedComm
     if (group_id < 0) return;
     
     if (!check_owner_permission(server, client, group_id,
-            "NOT_GROUP_OWNER - Only group owner can kick members")) return;
+            "Only group owner can kick members")) return;
     
     int target_user_id = validate_target_user(server, client, cmd->target_user);
     if (target_user_id < 0) return;
     
     // Check if target is in group
     if (!is_in_group(server->db_conn, group_id, target_user_id)) {
-        response = build_response(STATUS_NOT_IN_GROUP, "NOT_IN_GROUP - User not in group");
+        response = build_response(STATUS_NOT_IN_GROUP, "User not in group");
         server_send_response(client, response);
         free(response);
         return;
@@ -566,7 +693,7 @@ void handle_group_kick_command(Server *server, ClientSession *client, ParsedComm
     
     // Cannot kick owner
     if (is_group_owner(server->db_conn, group_id, target_user_id)) {
-        response = build_response(STATUS_CANNOT_KICK_OWNER, "CANNOT_KICK_OWNER - Cannot kick group owner");
+        response = build_response(STATUS_CANNOT_KICK_OWNER, "Cannot kick group owner");
         server_send_response(client, response);
         free(response);
         return;
@@ -574,7 +701,7 @@ void handle_group_kick_command(Server *server, ClientSession *client, ParsedComm
     
     // Remove user from group
     if (!remove_user_from_group(server->db_conn, group_id, target_user_id)) {
-        response = build_response(STATUS_DATABASE_ERROR, "UNKNOWN_ERROR - Failed to kick user from group");
+        response = build_response(STATUS_DATABASE_ERROR, "Failed to kick user from group");
         server_send_response(client, response);
         free(response);
         return;
@@ -609,9 +736,15 @@ void handle_group_kick_command(Server *server, ClientSession *client, ParsedComm
 // ============================================================================
 // TASK 7: Leave group
 // ============================================================================
+
 /**
- * @brief Handle GROUP_LEAVE command
- * Format: GROUP_LEAVE <group_id>
+ * @function handle_group_leave_command: Handle group leave command
+ * 
+ * @param server: Server instance
+ * @param client: Client session
+ * @param cmd: Parsed command
+ * 
+ * @return void
  */
 void handle_group_leave_command(Server *server, ClientSession *client, ParsedCommand *cmd) {
     if (!server || !client || !cmd) return;
@@ -622,7 +755,7 @@ void handle_group_leave_command(Server *server, ClientSession *client, ParsedCom
     
     if (cmd->param_count < 1) {
         response = build_response(STATUS_UNDEFINED_ERROR, 
-            "BAD_REQUEST - Group name required");
+            "Group name required");
         send_and_free(client, response);
         return;
     }
@@ -632,14 +765,14 @@ void handle_group_leave_command(Server *server, ClientSession *client, ParsedCom
     
     if (!is_in_group(server->db_conn, group_id, client->user_id)) {
         response = build_response(STATUS_NOT_IN_GROUP, 
-            "NOT_IN_GROUP - You are not in this group");
+            "You are not in this group");
         send_and_free(client, response);
         return;
     }
     
     if (is_group_owner(server->db_conn, group_id, client->user_id)) {
         response = build_response(STATUS_NOT_GROUP_OWNER, 
-            "OWNER_CANNOT_LEAVE - Owner cannot leave group. "
+            "Owner cannot leave group. "
             "Transfer ownership or delete group first");
         send_and_free(client, response);
         return;
@@ -647,7 +780,7 @@ void handle_group_leave_command(Server *server, ClientSession *client, ParsedCom
     
     if (!remove_user_from_group(server->db_conn, group_id, client->user_id)) {
         response = build_response(STATUS_DATABASE_ERROR, 
-            "UNKNOWN_ERROR - Failed to leave group");
+            "Failed to leave group");
         send_and_free(client, response);
         return;
     }
@@ -663,9 +796,15 @@ void handle_group_leave_command(Server *server, ClientSession *client, ParsedCom
 // ============================================================================
 // TASK 8: Join group with approval
 // ============================================================================
+
 /**
- * @brief Handle GROUP_JOIN command (with approval system)
- * Format: GROUP_JOIN <group_name>
+ * @function handle_group_join_command: Handle group join command
+ * 
+ * @param server: Server instance
+ * @param client: Client session
+ * @param cmd: Parsed command
+ * 
+ * @return void
  */
 void handle_group_join_command(Server *server, ClientSession *client, ParsedCommand *cmd) {
     if (!server || !client || !cmd) return;
@@ -676,7 +815,7 @@ void handle_group_join_command(Server *server, ClientSession *client, ParsedComm
     
     if (cmd->param_count < 1) {
         response = build_response(STATUS_UNDEFINED_ERROR, 
-            "BAD_REQUEST - Group name required");
+            "Group name required");
         send_and_free(client, response);
         return;
     }
@@ -690,7 +829,7 @@ void handle_group_join_command(Server *server, ClientSession *client, ParsedComm
     if (!res || PQntuples(res) == 0) {
         if (res) PQclear(res);
         response = build_response(STATUS_GROUP_NOT_FOUND, 
-            "GROUP_NOT_FOUND - Group does not exist");
+            "Group does not exist");
         send_and_free(client, response);
         return;
     }
@@ -703,7 +842,7 @@ void handle_group_join_command(Server *server, ClientSession *client, ParsedComm
     
     if (is_in_group(server->db_conn, group_id, client->user_id)) {
         response = build_response(STATUS_ALREADY_IN_GROUP, 
-            "ALREADY_IN_GROUP - You are already a member");
+            "You are already a member");
         send_and_free(client, response);
         return;
     }
@@ -712,14 +851,14 @@ void handle_group_join_command(Server *server, ClientSession *client, ParsedComm
     
     if (result == -2) {
         response = build_response(STATUS_REQUEST_PENDING, 
-            "REQUEST_PENDING - You already have a pending join request for this group");
+            "You already have a pending join request for this group");
         send_and_free(client, response);
         return;
     }
     
     if (result == -1) {
         response = build_response(STATUS_DATABASE_ERROR, 
-            "UNKNOWN_ERROR - Failed to create join request");
+            "Failed to create join request");
         send_and_free(client, response);
         return;
     }
@@ -766,14 +905,23 @@ void handle_group_join_command(Server *server, ClientSession *client, ParsedComm
 }
 
 /**
- * @brief Check and validate join request - Helper for approve/reject
+ * @function validate_join_request: Validate join request for approval/rejection
+ * 
+ * @param server: Server instance
+ * @param client: Client session
+ * @param cmd: Parsed command
+ * @param group_id_out: Output group ID
+ * @param requester_id_out: Output requester user ID
+ * @param group_name_out: Output group name
+ * 
+ * @return 0 on success, -1 on failure
  */
 int validate_join_request(Server *server, ClientSession *client, 
                                   ParsedCommand *cmd, int *group_id_out,
                                   int *requester_id_out, char *group_name_out) {
     if (cmd->param_count < 2) {
         char *response = build_response(STATUS_UNDEFINED_ERROR, 
-            "BAD_REQUEST - Group name and username required");
+            "Group name and username required");
         send_and_free(client, response);
         return -1;
     }
@@ -782,12 +930,12 @@ int validate_join_request(Server *server, ClientSession *client,
     if (group_id < 0) return -1;
     
     if (!check_owner_permission(server, client, group_id,
-            "NOT_GROUP_OWNER - Only group owner can approve/reject requests")) return -1;
+            "Only group owner can approve/reject requests")) return -1;
     
     int requester_id = get_user_id(server->db_conn, cmd->target_user);
     if (requester_id < 0) {
         char *response = build_response(STATUS_USER_NOT_FOUND, 
-            "USER_NOT_FOUND - User does not exist");
+            "User does not exist");
         send_and_free(client, response);
         return -1;
     }
@@ -803,7 +951,7 @@ int validate_join_request(Server *server, ClientSession *client,
     if (!res || PQntuples(res) == 0) {
         if (res) PQclear(res);
         char *response = build_response(STATUS_NO_PENDING_REQUEST, 
-            "NO_PENDING_REQUEST - No pending join request from this user");
+            "No pending join request from this user");
         send_and_free(client, response);
         return -1;
     }
@@ -812,7 +960,7 @@ int validate_join_request(Server *server, ClientSession *client,
     if (strcmp(status, "pending") != 0) {
         PQclear(res);
         char *response = build_response(STATUS_NO_PENDING_REQUEST, 
-            "NO_PENDING_REQUEST - Request already processed");
+            "Request already processed");
         send_and_free(client, response);
         return -1;
     }
@@ -827,7 +975,12 @@ int validate_join_request(Server *server, ClientSession *client,
 }
 
 /**
- * @brief Update join request status - Helper
+ * @function update_request_status: Update join request status
+ * 
+ * @param conn: Database connection
+ * @param group_id: Group ID
+ * @param user_id: User ID
+ * @param status: New status ("approved" or "rejected")
  */
 void update_request_status(PGconn *conn, int group_id, int user_id, 
                                    const char *status) {
@@ -840,8 +993,13 @@ void update_request_status(PGconn *conn, int group_id, int user_id,
 }
 
 /**
- * @brief Handle GROUP_APPROVE command
- * Format: GROUP_APPROVE <group_name> <username>
+ * @function handle_group_approve_command: Handle group join approval command
+ * 
+ * @param server: Server instance
+ * @param client: Client session
+ * @param cmd: Parsed command
+ * 
+ * @return void
  */
 void handle_group_approve_command(Server *server, ClientSession *client, ParsedCommand *cmd) {
     if (!server || !client || !cmd) return;
@@ -857,7 +1015,7 @@ void handle_group_approve_command(Server *server, ClientSession *client, ParsedC
     // Add user to group
     if (!add_user_to_group(server->db_conn, group_id, requester_id)) {
         char *response = build_response(STATUS_DATABASE_ERROR, 
-            "UNKNOWN_ERROR - Failed to add user");
+            "Failed to add user");
         send_and_free(client, response);
         return;
     }
@@ -897,8 +1055,13 @@ void handle_group_approve_command(Server *server, ClientSession *client, ParsedC
 }
 
 /**
- * @brief Handle GROUP_REJECT command
- * Format: GROUP_REJECT <group_name> <username>
+ * @function handle_group_reject_command: Handle group join rejection command
+ * 
+ * @param server: Server instance
+ * @param client: Client session
+ * @param cmd: Parsed command
+ * 
+ * @return void
  */
 void handle_group_reject_command(Server *server, ClientSession *client, ParsedCommand *cmd) {
     if (!server || !client || !cmd) return;
@@ -945,8 +1108,13 @@ void handle_group_reject_command(Server *server, ClientSession *client, ParsedCo
 }
 
 /**
- * @brief Handle LIST_JOIN_REQUESTS command
- * Format: LIST_JOIN_REQUESTS <group_name>
+ * @function handle_list_join_requests_command: Handle listing join requests command
+ * 
+ * @param server: Server instance
+ * @param client: Client session
+ * @param cmd: Parsed command
+ * 
+ * @return void
  */
 void handle_list_join_requests_command(Server *server, ClientSession *client, 
                                        ParsedCommand *cmd) {
@@ -956,7 +1124,7 @@ void handle_list_join_requests_command(Server *server, ClientSession *client,
     
     if (cmd->param_count < 1) {
         char *response = build_response(STATUS_UNDEFINED_ERROR, 
-            "BAD_REQUEST - Group name required");
+            "Group name required");
         send_and_free(client, response);
         return;
     }
@@ -965,7 +1133,7 @@ void handle_list_join_requests_command(Server *server, ClientSession *client,
     if (group_id < 0) return;
     
     if (!check_owner_permission(server, client, group_id,
-            "NOT_GROUP_OWNER - Only owner can view join requests")) return;
+            "Only owner can view join requests")) return;
     
     char query[512];
     snprintf(query, sizeof(query),
@@ -979,7 +1147,7 @@ void handle_list_join_requests_command(Server *server, ClientSession *client,
     PGresult *res = execute_query_with_result(server->db_conn, query);
     if (!res) {
         char *response = build_response(STATUS_DATABASE_ERROR, 
-            "UNKNOWN_ERROR - Failed to fetch requests");
+            "Failed to fetch requests");
         send_and_free(client, response);
         return;
     }
@@ -1015,7 +1183,66 @@ void handle_list_join_requests_command(Server *server, ClientSession *client,
 // ============================================================================
 
 /**
- * @brief Broadcast message to all group members
+ * @function is_user_in_group_messaging: Check if user is in messaging mode for group
+ * 
+ * @param db_conn: Database connection
+ * @param user_id: User ID
+ * @param group_id: Group ID
+ * 
+ * @return 1 if in messaging mode, 0 otherwise
+ */
+int is_user_in_group_messaging(PGconn *db_conn, int user_id, int group_id) {
+    char query[256];
+    snprintf(query, sizeof(query),
+            "SELECT is_messaging FROM group_members "
+            "WHERE user_id = %d AND group_id = %d",
+            user_id, group_id);
+    
+    PGresult *res = execute_query_with_result(db_conn, query);
+    if (!res || PQntuples(res) == 0) {
+        if (res) PQclear(res);
+        return 0;
+    }
+    
+    const char *is_messaging = PQgetvalue(res, 0, 0);
+    int result = (strcmp(is_messaging, "t") == 0);
+    PQclear(res);
+    
+    return result;
+}
+
+/**
+ * @function set_group_messaging_status: Set user's messaging status for group
+ * 
+ * @param db_conn: Database connection
+ * @param user_id: User ID
+ * @param group_id: Group ID
+ * @param is_messaging: 1 to enable messaging, 0 to disable
+ * 
+ * @return 1 on success, 0 on failure
+ */
+int set_group_messaging_status(PGconn *db_conn, int user_id, int group_id, int is_messaging) {
+    char query[256];
+    snprintf(query, sizeof(query),
+            "UPDATE group_members SET is_messaging = %s "
+            "WHERE user_id = %d AND group_id = %d",
+            is_messaging ? "TRUE" : "FALSE", user_id, group_id);
+    
+    return execute_query(db_conn, query);
+}
+
+/**
+ * @function broadcast_group_message: Broadcast message to group members
+ * 
+ * @param server: Server instance
+ * @param group_id: Group ID
+ * @param group_name: Group name
+ * @param sender_username: Sender's username
+ * @param sender_id: Sender's user ID
+ * @param message: Message content
+ * @param message_id: Message ID
+ * 
+ * @return void
  */
 void broadcast_group_message(Server *server, int group_id, const char *group_name, 
                              const char *sender_username, int sender_id,
@@ -1048,21 +1275,18 @@ void broadcast_group_message(Server *server, int group_id, const char *group_nam
         const char *member_username = PQgetvalue(res, i, 0);
         int member_id = atoi(PQgetvalue(res, i, 1));
         
+        // Skip sender
         if (member_id == sender_id) {
             printf("Skipping sender '%s'\n", member_username);
-            
-            char read_query[256];
-            snprintf(read_query, sizeof(read_query),
-                    "INSERT INTO group_message_reads (message_id, user_id) "
-                    "VALUES (%d, %d) ON CONFLICT DO NOTHING",
-                    message_id, sender_id);
-            execute_query(server->db_conn, read_query);
             continue;
         }
         
         ClientSession *member = server_get_client_by_username(server, member_username);
         
-        if (member && member->is_authenticated) {
+        // Chỉ gửi real-time nếu user đang online VÀ đang trong chế độ messaging
+        if (member && member->is_authenticated && 
+            is_user_in_group_messaging(server->db_conn, member_id, group_id)) {
+            
             char notification[1024];
             snprintf(notification, sizeof(notification),
                     "GROUP_MSG %s %s: %s", group_name, sender_username, message);
@@ -1072,22 +1296,14 @@ void broadcast_group_message(Server *server, int group_id, const char *group_nam
             free(response);
             
             if (send_result > 0) {
-                printf("Message sent to ONLINE user '%s'\n", member_username);
+                printf("Message sent to ONLINE user '%s' (in messaging mode)\n", member_username);
                 online_count++;
-                
-                char read_query[256];
-                snprintf(read_query, sizeof(read_query),
-                        "INSERT INTO group_message_reads (message_id, user_id) "
-                        "VALUES (%d, %d) ON CONFLICT DO NOTHING",
-                        message_id, member_id);
-                execute_query(server->db_conn, read_query);
             } else {
-                printf("Failed to send to '%s', will fetch offline later\n", 
-                       member_username);
+                printf("Failed to send to '%s', will fetch offline later\n", member_username);
                 offline_count++;
             }
         } else {
-            printf("User '%s' is OFFLINE, will fetch later\n", member_username);
+            printf("User '%s' is OFFLINE or not in messaging mode, will fetch later\n", member_username);
             offline_count++;
         }
     }
@@ -1098,9 +1314,15 @@ void broadcast_group_message(Server *server, int group_id, const char *group_nam
     printf("=== END BROADCASTING ===\n\n");
 }
 
+
 /**
- * @brief Handle GROUP_MSG command
- * Format: GROUP_MSG <group_name> <message>
+ * @function handle_group_msg_command: Handle group message command
+ * 
+ * @param server: Server instance
+ * @param client: Client session
+ * @param cmd: Parsed command
+ * 
+ * @return void
  */
 void handle_group_msg_command(Server *server, ClientSession *client, ParsedCommand *cmd) {
     if (!server || !client || !cmd) return;
@@ -1113,7 +1335,7 @@ void handle_group_msg_command(Server *server, ClientSession *client, ParsedComma
     if (cmd->param_count < 2 || !cmd->group_name || !cmd->message) {
         printf("ERROR: Invalid parameters\n");
         char *response = build_response(STATUS_UNDEFINED_ERROR, 
-            "BAD_REQUEST - Group name and message required");
+            "Group name and message required");
         send_and_free(client, response);
         return;
     }
@@ -1124,7 +1346,7 @@ void handle_group_msg_command(Server *server, ClientSession *client, ParsedComma
     if (group_id < 0) {
         printf("ERROR: Group not found\n");
         char *response = build_response(STATUS_GROUP_NOT_FOUND, 
-            "GROUP_NOT_FOUND - Group does not exist");
+            "Group does not exist");
         send_and_free(client, response);
         return;
     }
@@ -1134,7 +1356,7 @@ void handle_group_msg_command(Server *server, ClientSession *client, ParsedComma
     if (!is_in_group(server->db_conn, group_id, client->user_id)) {
         printf("ERROR: User not in group\n");
         char *response = build_response(STATUS_NOT_IN_GROUP, 
-            "NOT_IN_GROUP - You are not a member of this group");
+            "You are not a member of this group");
         send_and_free(client, response);
         return;
     }
@@ -1142,7 +1364,7 @@ void handle_group_msg_command(Server *server, ClientSession *client, ParsedComma
     if (strlen(cmd->message) > MAX_MESSAGE_LENGTH - 1) {
         printf("ERROR: Message too long (%zu bytes)\n", strlen(cmd->message));
         char *response = build_response(STATUS_MESSAGE_TOO_LONG, 
-            "MESSAGE_TOO_LONG - Message exceeds maximum length");
+            "Message exceeds maximum length");
         send_and_free(client, response);
         return;
     }
@@ -1153,7 +1375,7 @@ void handle_group_msg_command(Server *server, ClientSession *client, ParsedComma
     if (!escaped_message) {
         printf("ERROR: Failed to escape message\n");
         char *response = build_response(STATUS_DATABASE_ERROR, 
-            "DATABASE_ERROR - Failed to save message");
+            "Failed to save message");
         send_and_free(client, response);
         return;
     }
@@ -1170,7 +1392,7 @@ void handle_group_msg_command(Server *server, ClientSession *client, ParsedComma
         if (res) PQclear(res);
         printf("ERROR: Failed to save message to database\n");
         char *response = build_response(STATUS_DATABASE_ERROR, 
-            "DATABASE_ERROR - Failed to save message");
+            "Failed to save message");
         send_and_free(client, response);
         return;
     }
@@ -1185,38 +1407,45 @@ void handle_group_msg_command(Server *server, ClientSession *client, ParsedComma
                           cmd->message, message_id);
     
     char *response = build_response(STATUS_GROUP_MSG_SENT_OK, 
-        "OK - Group message sent successfully");
+        "Group message sent successfully");
     send_and_free(client, response);
     
     printf("=== END HANDLE GROUP MESSAGE ===\n\n");
 }
 
 /**
- * @brief Handle GET_GROUP_OFFLINE_MSG command
- * Format: GROUP_SEND_OFFLINE_MSG <group_name>
+ * @function handle_get_group_offline_messages: Handle fetching offline group messages
+ * 
+ * @param server: Server instance
+ * @param client: Client session
+ * @param cmd: Parsed command
+ * 
+ * @return void
  */
 void handle_get_group_offline_messages(Server *server, ClientSession *client, 
                                        ParsedCommand *cmd) {
+    if (!server || !client || !cmd) return;
+
     printf("\n=== GET GROUP OFFLINE MESSAGES ===\n");
-    printf("User '%s' (ID:%d) requesting offline group messages\n", 
+    printf("User '%s' (ID:%d) entering group messaging mode\n", 
            client->username, client->user_id);
     
     if (!check_auth(client)) return;
     
     if (!cmd->group_name || strlen(cmd->group_name) == 0) {
         char *response = build_response(STATUS_UNDEFINED_ERROR, 
-            "BAD_REQUEST - Group name required");
+            "Group name required");
         send_and_free(client, response);
         return;
     }
     
-    printf("Fetching offline messages for group '%s'\n", cmd->group_name);
+    printf("Entering messaging mode for group '%s'\n", cmd->group_name);
     
     int group_id = find_group_id(server->db_conn, cmd->group_name);
     if (group_id < 0) {
         printf("ERROR: Group not found\n");
         char *response = build_response(STATUS_GROUP_NOT_FOUND, 
-            "GROUP_NOT_FOUND - Group does not exist");
+            "Group does not exist");
         send_and_free(client, response);
         return;
     }
@@ -1224,26 +1453,38 @@ void handle_get_group_offline_messages(Server *server, ClientSession *client,
     if (!is_in_group(server->db_conn, group_id, client->user_id)) {
         printf("ERROR: User not in group\n");
         char *response = build_response(STATUS_NOT_IN_GROUP, 
-            "NOT_IN_GROUP - You are not a member");
+            "You are not a member");
         send_and_free(client, response);
         return;
     }
+    
+    if (!set_group_messaging_status(server->db_conn, client->user_id, group_id, 1)) {
+        printf("ERROR: Failed to set messaging status\n");
+        char *response = build_response(STATUS_DATABASE_ERROR, 
+            "Failed to enter messaging mode");
+        send_and_free(client, response);
+        return;
+    }
+    
+    printf("Messaging mode activated. Fetching offline messages...\n");
     
     char query[1024];
     snprintf(query, sizeof(query),
             "SELECT gm.id, u.username, gm.content, gm.created_at "
             "FROM group_messages gm "
             "JOIN users u ON gm.sender_id = u.id "
-            "LEFT JOIN group_message_reads gmr ON gm.id = gmr.message_id "
-              "AND gmr.user_id = %d "
-            "WHERE gm.group_id = %d AND gmr.id IS NULL "
+            "JOIN group_members gm_receiver ON gm_receiver.group_id = gm.group_id "
+            "  AND gm_receiver.user_id = %d "
+            "WHERE gm.group_id = %d "
+            "  AND gm.sender_id != %d "
+            "  AND gm.created_at > gm_receiver.last_read_at "
             "ORDER BY gm.created_at ASC",
-            client->user_id, group_id);
+            client->user_id, group_id, client->user_id);
     
     PGresult *res = execute_query_with_result(server->db_conn, query);
     if (!res) {
         char *response = build_response(STATUS_DATABASE_ERROR, 
-            "UNKNOWN_ERROR - Failed to fetch offline messages");
+            "Failed to fetch offline messages");
         send_and_free(client, response);
         return;
     }
@@ -1253,6 +1494,14 @@ void handle_get_group_offline_messages(Server *server, ClientSession *client,
     if (num_messages == 0) {
         PQclear(res);
         printf("No unread messages for group '%s'\n", cmd->group_name);
+        
+        char update_query[256];
+        snprintf(update_query, sizeof(update_query),
+                "UPDATE group_members SET last_read_at = NOW() "
+                "WHERE user_id = %d AND group_id = %d",
+                client->user_id, group_id);
+        execute_query(server->db_conn, update_query);
+        
         char *response = build_response(STATUS_NOT_HAVE_OFFLINE_MESSAGE, 
             "No unread messages");
         send_and_free(client, response);
@@ -1267,18 +1516,10 @@ void handle_get_group_offline_messages(Server *server, ClientSession *client,
     offset += snprintf(message_list + offset, sizeof(message_list) - offset,
                       "\n=== OFFLINE MESSAGES FROM GROUP '%s' ===\n", cmd->group_name);
     
-    int message_ids[100];
-    int id_count = 0;
-    
     for (int i = 0; i < num_messages && offset < (int)sizeof(message_list) - 500; i++) {
-        int msg_id = atoi(PQgetvalue(res, i, 0));
         const char *sender = PQgetvalue(res, i, 1);
         const char *content = PQgetvalue(res, i, 2);
         const char *created_at = PQgetvalue(res, i, 3);
-        
-        if (id_count < 100) {
-            message_ids[id_count++] = msg_id;
-        }
         
         offset += snprintf(message_list + offset, sizeof(message_list) - offset,
                           "[%s] %s: %s\n", created_at, sender, content);
@@ -1289,21 +1530,50 @@ void handle_get_group_offline_messages(Server *server, ClientSession *client,
     
     PQclear(res);
     
-    for (int i = 0; i < id_count; i++) {
-        snprintf(query, sizeof(query),
-                "INSERT INTO group_message_reads (message_id, user_id) "
-                "VALUES (%d, %d) ON CONFLICT DO NOTHING",
-                message_ids[i], client->user_id);
-        
-        if (!execute_query(server->db_conn, query)) {
-            printf("WARNING: Failed to mark message %d as read\n", message_ids[i]);
-        }
-    }
+    char update_query[256];
+    snprintf(update_query, sizeof(update_query),
+            "UPDATE group_members SET last_read_at = NOW() "
+            "WHERE user_id = %d AND group_id = %d",
+            client->user_id, group_id);
+    execute_query(server->db_conn, update_query);
     
-    printf("Marked %d message(s) as read\n", id_count);
+    printf("Marked messages as read\n");
     
     char *response = build_response(STATUS_GET_OFFLINE_MSG_OK, message_list);
     send_and_free(client, response);
     
     printf("=== END GET GROUP OFFLINE MESSAGES ===\n\n");
+}
+
+/**
+ * @function handle_exit_group_messaging: Handle exiting group messaging mode
+ * 
+ * @param server: Server instance
+ * @param client: Client session
+ * @param cmd: Parsed command
+ * 
+ * @return void
+ */
+void handle_exit_group_messaging(Server *server, ClientSession *client, ParsedCommand *cmd) {
+    if (!server || !client || !cmd) return;
+    
+    printf("\n=== EXIT GROUP MESSAGING ===\n");
+    printf("User '%s' (ID:%d) exiting group messaging mode\n", 
+           client->username, client->user_id);
+    
+    if (!check_auth(client)) return;
+    
+    if (!cmd->group_name || strlen(cmd->group_name) == 0) {
+        return;
+    }
+    
+    int group_id = find_group_id(server->db_conn, cmd->group_name);
+    if (group_id < 0) {
+        return;
+    }
+    
+    set_group_messaging_status(server->db_conn, client->user_id, group_id, 0);
+    
+    printf("Messaging mode deactivated for group '%s'\n", cmd->group_name);
+    printf("=== END EXIT GROUP MESSAGING ===\n\n");
 }
