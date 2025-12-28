@@ -222,15 +222,15 @@ void handle_friend_request(Server *server, ClientSession *client, ParsedCommand 
     free(response);
     
     // Notify the target user (if online)
-    // ClientSession *target_client = server_get_client_by_username(server, username_clean);
-    // if (target_client && target_client->is_authenticated) {
-    //     char notification[256];
-    //     snprintf(notification, sizeof(notification),
-    //             "You have a new friend request from %s", client->username);
-    //     char *notify_msg = build_response(300, notification);
-    //     server_send_response(target_client, notify_msg);
-    //     free(notify_msg);
-    // }
+    ClientSession *target_client = server_get_client_by_username(server, username_clean);
+    if (target_client && target_client->is_authenticated) {
+        char notification[512];
+        snprintf(notification, sizeof(notification),
+                "FRIEND_REQUEST_NOTIFICATION from_user=\"%s\"", client->username);
+        char *notify_msg = build_response(300, notification);
+        server_send_response(target_client, notify_msg);
+        free(notify_msg);
+    }
     
     printf("Friend request: %s -> %s\n", client->username, username_clean);
 }
@@ -386,15 +386,15 @@ void handle_friend_accept(Server *server, ClientSession *client, ParsedCommand *
     free(response);
     
     // Notify the requester (if online)
-    // ClientSession *requester_client = server_get_client_by_username(server, username_clean);
-    // if (requester_client && requester_client->is_authenticated) {
-    //     char notification[256];
-    //     snprintf(notification, sizeof(notification),
-    //             "%s accepted your friend request", client->username);
-    //     char *notify_msg = build_response(300, notification);
-    //     server_send_response(requester_client, notify_msg);
-    //     free(notify_msg);
-    // }
+    ClientSession *requester_client = server_get_client_by_username(server, username_clean);
+    if (requester_client && requester_client->is_authenticated) {
+        char notification[512];
+        snprintf(notification, sizeof(notification),
+                "FRIEND_ACCEPT_NOTIFICATION accepter_user=\"%s\"", client->username);
+        char *notify_msg = build_response(300, notification);
+        server_send_response(requester_client, notify_msg);
+        free(notify_msg);
+    }
     
     printf("Friend accepted: %s <-> %s\n", username_clean, client->username);
 }

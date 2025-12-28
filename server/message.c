@@ -475,7 +475,7 @@ void handle_get_offline_messages(Server *server, ClientSession *client, ParsedCo
     int offset = 0;
     
     offset += snprintf(message_list + offset, sizeof(message_list) - offset,
-                      "\n=== OFFLINE MESSAGES FROM %s ===\n", sender_username);
+                      "\n=== SHOW OFFLINE MESSAGES FROM %s ===\n", sender_username);
     
     // Store message IDs for update later
     int message_ids[100];  // Maximum 100 messages
