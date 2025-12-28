@@ -49,6 +49,13 @@ void log_activity(const char *username, const char *cmd_code, const char *cmd_de
 // TASK 2
 // ============================================================================
 
+/**
+ * @functon server_create: Create and initialize a new server instance
+ * 
+ * @param port The port number on which the server will listen for incoming connections
+ * 
+ * @return Pointer to the created Server instance, or NULL on failure
+ */
 Server* server_create(int port) {
     Server *server = (Server*)malloc(sizeof(Server));
     if (!server) {
@@ -121,6 +128,13 @@ Server* server_create(int port) {
     return server;
 }
 
+/**
+ * @function server_destroy: Clean up and free resources associated with the server
+ * 
+ * @param server Pointer to the Server instance to be destroyed
+ * 
+ * @return void
+ */
 void server_destroy(Server *server) {
     if (!server) return;
     
@@ -143,6 +157,13 @@ void server_destroy(Server *server) {
     printf("Server destroyed\n");
 }
 
+/**
+ * @function server_start: Start the server to accept and handle client connections
+ * 
+ * @param server Pointer to the Server instance to be started
+ * 
+ * @return 1 on success, 0 on failure
+ */
 int server_start(Server *server) {
     if (!server) return 0;
     
@@ -151,6 +172,13 @@ int server_start(Server *server) {
     return 1;
 }
 
+/**
+ * @function server_stop: Stop the server from accepting new connections and processing data
+ * 
+ * @param server Pointer to the Server instance to be stopped
+ * 
+ * @return void
+ */
 void server_stop(Server *server) {
     if (!server) return;
     
@@ -158,6 +186,13 @@ void server_stop(Server *server) {
     printf("Server stopping...\n");
 }
 
+/**
+ * @function server_run: Main loop to run the server, accepting connections and processing data
+ * 
+ * @param server Pointer to the Server instance to be run
+ * 
+ * @return void
+ */
 void server_run(Server *server) {
     if (!server) return;
     
@@ -203,6 +238,13 @@ void server_run(Server *server) {
     printf("Server stopped\n");
 }
 
+/**
+ * @function server_accept_connection: Accept a new client connection
+ * 
+ * @param server Pointer to the Server instance
+ * 
+ * @return The file descriptor of the accepted client socket, or -1 on failure
+ */
 int server_accept_connection(Server *server) {
     if (!server) return -1;
     
@@ -242,6 +284,14 @@ int server_accept_connection(Server *server) {
     return client_fd;
 }
 
+/**
+ * @function server_receive_data: Receive data from a client and process messages
+ * 
+ * @param server Pointer to the Server instance
+ * @param client Pointer to the ClientSession instance
+ * 
+ * @return Number of bytes received, or -1 on error
+ */
 int server_receive_data(Server *server, ClientSession *client) {
     if (!server || !client) return -1;
     
@@ -277,6 +327,14 @@ int server_receive_data(Server *server, ClientSession *client) {
     return bytes_received;
 }
 
+/**
+ * @function server_send_response: Send a response message to a client
+ * 
+ * @param client Pointer to the ClientSession instance
+ * @param response The response message to send
+ * 
+ * @return Number of bytes sent, or -1 on error
+ */
 int server_send_response(ClientSession *client, const char *response) {
     if (!client || !response) return -1;
     
@@ -302,6 +360,13 @@ int server_send_response(ClientSession *client, const char *response) {
 // Client Session Management
 // ============================================================================
 
+/**
+ * @function client_session_create: Create and initialize a new client session
+ * 
+ * @param socket_fd The socket file descriptor associated with the client
+ * 
+ * @return Pointer to the created ClientSession instance, or NULL on failure
+ */
 ClientSession* client_session_create(int socket_fd) {
     ClientSession *session = (ClientSession*)malloc(sizeof(ClientSession));
     if (!session) return NULL;
@@ -323,6 +388,13 @@ ClientSession* client_session_create(int socket_fd) {
     return session;
 }
 
+/**
+ * @function client_session_destroy: Clean up and free resources associated with a client session
+ * 
+ * @param session Pointer to the ClientSession instance to be destroyed
+ * 
+ * @return void
+ */
 void client_session_destroy(ClientSession *session) {
     if (!session) return;
     
@@ -337,6 +409,14 @@ void client_session_destroy(ClientSession *session) {
     free(session);
 }
 
+/**
+ * @function server_add_client: Add a new client session to the server
+ * 
+ * @param server Pointer to the Server instance
+ * @param socket_fd The socket file descriptor of the new client
+ * 
+ * @return 1 on success, 0 on failure
+ */
 int server_add_client(Server *server, int socket_fd) {
     if (!server) return 0;
     
@@ -361,6 +441,14 @@ int server_add_client(Server *server, int socket_fd) {
     return 0;
 }
 
+/**
+ * @function server_remove_client: Remove a client session from the server
+ * 
+ * @param server Pointer to the Server instance
+ * @param socket_fd The socket file descriptor of the client to be removed
+ * 
+ * @return void
+ */
 void server_remove_client(Server *server, int socket_fd) {
     if (!server) return;
     
@@ -388,6 +476,14 @@ void server_remove_client(Server *server, int socket_fd) {
     }
 }
 
+/**
+ * @function server_get_client_by_fd: Retrieve a client session by its socket file descriptor
+ * 
+ * @param server Pointer to the Server instance
+ * @param socket_fd The socket file descriptor of the client
+ * 
+ * @return Pointer to the ClientSession instance, or NULL if not found
+ */
 ClientSession* server_get_client_by_fd(Server *server, int socket_fd) {
     if (!server) return NULL;
     
@@ -400,6 +496,14 @@ ClientSession* server_get_client_by_fd(Server *server, int socket_fd) {
     return NULL;
 }
 
+/**
+ * @function server_get_client_by_username: Retrieve a client session by its username
+ * 
+ * @param server Pointer to the Server instance
+ * @param username The username of the client
+ * 
+ * @return Pointer to the ClientSession instance, or NULL if not found
+ */
 ClientSession* server_get_client_by_username(Server *server, const char *username) {
     if (!server || !username) return NULL;
     

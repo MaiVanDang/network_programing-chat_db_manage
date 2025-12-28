@@ -8,6 +8,13 @@ ClientConn global_client;
 // Signal Handler
 // ============================================================================
 
+/**
+ * @function signal_handler: Handle termination signals to clean up resources.
+ * 
+ * @param signum The signal number received.
+ * 
+ * @return void
+ */
 void signal_handler(int signum) {
     printf("\nReceived signal %d, disconnecting...\n", signum);
     if (g_socket_fd >= 0) {
@@ -22,7 +29,13 @@ void signal_handler(int signum) {
 // ============================================================================
 
 /**
- * @brief Initialize the client connection.
+ * @function client_init: Initialize the client connection to the server.
+ * 
+ * @param client Pointer to ClientConn structure.
+ * @param server_addr Server IP address as a string.
+ * @param port Server port number.
+ * 
+ * @return 0 on success, -1 on failure.
  */
 int client_init(ClientConn *client, const char *server_addr, int port) {
     struct sockaddr_in server_sockaddr;
@@ -66,7 +79,11 @@ int client_init(ClientConn *client, const char *server_addr, int port) {
 }
 
 /**
- * @brief Clean up the client connection.
+ * @function client_cleanup: Clean up the client connection resources.
+ * 
+ * @param client Pointer to ClientConn structure.
+ * 
+ * @return void
  */
 void client_cleanup(ClientConn *client) {
     if (client->recv_buffer) {
@@ -84,6 +101,11 @@ void client_cleanup(ClientConn *client) {
 // Input/Output Utilities
 // ============================================================================
 
+/**
+ * @function read_line: Read a line of input from stdin dynamically.
+ * 
+ * @return Pointer to the dynamically allocated string (must be freed by caller).
+ */
 char* read_line() {
     size_t capacity = INITIAL_BUFFER_SIZE;
     size_t length = 0;
@@ -124,7 +146,13 @@ char* read_line() {
     return buffer;
 }
 
-// Extract message content without status code
+/**
+ * @function extract_message_content: Extract the message content by removing status code.
+ * 
+ * @param message The full message string.
+ * 
+ * @return Pointer to the message content within the original string.
+ */
 const char* extract_message_content(const char *message) {
     if (!message) return message;
     
@@ -145,12 +173,27 @@ const char* extract_message_content(const char *message) {
     return (*ptr) ? ptr : message;
 }
 
+/**
+ * @function send_message: Send a message to the server with protocol delimiter.
+ * 
+ * @param client Pointer to ClientConn structure.
+ * @param message The message string to send.
+ * 
+ * @return void
+ */
 void send_message(ClientConn *client, const char *message) {
     char buff[BUFFER_SIZE];
     snprintf(buff, BUFFER_SIZE, "%s%s", message, PROTOCOL_DELIMITER);
     send(client->sockfd, buff, strlen(buff), 0);
 }
 
+/**
+ * @function handle_server_response: Handle server response messages.
+ * 
+ * @param client Pointer to ClientConn structure.
+ * 
+ * @return Number of messages processed, 0 if none, -1 on error.
+ */
 int handle_server_response(ClientConn *client) {
     if (!client || !client->connected) return 0;
     
@@ -188,6 +231,14 @@ int handle_server_response(ClientConn *client) {
     return messages_processed > 0 ? 1 : 0;
 }
 
+/**
+ * @function set_socket_nonblocking: Set or clear non-blocking mode on a socket.
+ * 
+ * @param sockfd The socket file descriptor.
+ * @param nonblocking 1 to set non-blocking, 0 to clear.
+ * 
+ * @return Previous flags of the socket.
+ */
 static int set_socket_nonblocking(int sockfd, int nonblocking) {
     int flags = fcntl(sockfd, F_GETFL, 0);
     if (nonblocking) {
@@ -198,6 +249,43 @@ static int set_socket_nonblocking(int sockfd, int nonblocking) {
     return flags;
 }
 
+/**
+ * @function display_group_join_result_notification: Display group join result notification.
+ * 
+ * @param message The notification message.
+ * @param approved 1 if approved, 0 if rejected.
+ * 
+ * @return void
+ */
+void display_group_join_result_notification(const char *message, int approved) {
+    int group_id = 0;
+    char group_name[128] = {0};
+    
+    const char *id_start = strstr(message, "group_id=");
+    if (id_start) {
+        sscanf(id_start, "group_id=%d", &group_id);
+    }
+    
+    parse_notification_field(message, "group_name", group_name, sizeof(group_name));
+    
+    printf("\n");
+    if (approved) {
+        printf("✓ JOIN REQUEST APPROVED\n");
+        printf("You can now chat in group '%s' (ID: %d)\n", group_name, group_id);
+    } else {
+        printf("✗ JOIN REQUEST REJECTED\n");
+        printf("Your request to join '%s' was rejected\n", group_name);
+    }
+    printf("\n");
+}
+
+/**
+ * @function check_server_messages: Check and process incoming server messages.
+ * 
+ * @param client Pointer to ClientConn structure.
+ * 
+ * @return Number of notifications processed, 0 if none, -1 on error.
+ */
 int check_server_messages(ClientConn *client) {
     if (!client || !client->connected) return 0;
     
@@ -230,23 +318,97 @@ int check_server_messages(ClientConn *client) {
     }
     
     char *message;
-    int messages_processed = 0;
-    while ((message = stream_buffer_extract_message(client->recv_buffer)) != NULL) {
-        const char *content = extract_message_content(message);
-        if (content && strlen(content) > 0) {
-            printf("[Server] %s\n", content);
-        }
-        free(message);
-        messages_processed++;
-    }
+    int notification_count = 0;
     
-    return messages_processed;
+    while ((message = stream_buffer_extract_message(client->recv_buffer)) != NULL) {
+        int displayed = 0; 
+        if (strstr(message, "118")) {
+            printf("\n");
+            char *msg_copy = strdup(message);
+            char *line = strtok(msg_copy, "\n");
+            line = strtok(NULL, "\n");
+
+            while (line != NULL) {
+                if (line[0] == '[') {
+                    char *close_bracket = strchr(line, ']');
+                    if (close_bracket) {
+                        int ts_len = close_bracket - line - 1;
+                        char timestamp[64] = {0};
+                        if (ts_len > 0 && ts_len < 64) {
+                            strncpy(timestamp, line + 1, ts_len);
+                        }
+
+                        char *sender_start = close_bracket + 2;
+                        char *colon = strstr(sender_start, ": ");
+
+                        if (colon) {
+                            int sender_len = colon - sender_start;
+                            char sender[64] = {0};
+                            if (sender_len > 0 && sender_len < 64) {
+                                strncpy(sender, sender_start, sender_len);
+                            }
+
+                            char *msg_content = colon + 2;
+                            printf("\033[90m[%s]\033[0m [\033[33m%s\033[0m]: %s\n", 
+                                   timestamp, sender, msg_content);
+                        }
+                    }
+                } else if (strstr(line, "===")) {
+                    printf("%s\n", line);
+                }
+
+                line = strtok(NULL, "\n");
+            }
+
+            free(msg_copy);
+            displayed = 1;
+        }
+        else if (strstr(message, "GROUP_INVITE_NOTIFICATION")) {
+            display_group_invite_notification(message);
+            displayed = 1;
+        } 
+        else if (strstr(message, "OFFLINE_NOTIFICATION")) {
+            display_offline_notification(message);
+            displayed = 1;
+        }
+        else if (strstr(message, "GROUP_KICK_NOTIFICATION")) {
+            display_group_kick_notification(message);
+            displayed = 1;
+        }
+        else if (strstr(message, "GROUP_JOIN_REQUEST_NOTIFICATION")) {
+            display_group_join_request_notification(message);
+            displayed = 1;
+        }
+        else if (strstr(message, "GROUP_JOIN_APPROVED")) {
+            display_group_join_result_notification(message, 1);
+            displayed = 1;
+        }
+        else if (strstr(message, "GROUP_JOIN_REJECTED")) {
+            display_group_join_result_notification(message, 0);
+            displayed = 1;
+        }
+        
+        free(message);
+        
+        if (displayed) {
+            notification_count++;
+        }
+    }
+
+    return notification_count;
 }
 
 // ============================================================================
 // Menu Display Functions
 // ============================================================================
 
+/**
+ * @function get_menu_choice_with_notifications: Get user menu choice while checking for notifications.
+ * 
+ * @param client Pointer to ClientConn structure.
+ * 
+ * @return The user's menu choice.
+ */
 int get_menu_choice_with_notifications(ClientConn *client) {
     int choice = -1;
     int got_input = 0;
@@ -295,6 +457,9 @@ int get_menu_choice_with_notifications(ClientConn *client) {
     return choice;
 }
 
+/**
+ * @function print_main_menu: Display the main menu options.
+ */
 void print_main_menu() {
     printf("\n");
     printf("========================================\n");
@@ -308,6 +473,9 @@ void print_main_menu() {
     printf("========================================\n");
 }
 
+/**
+ * @function print_auth_menu: Display the authentication menu options.
+ */
 void print_auth_menu() {
     printf("\n");
     printf("=== AUTHENTICATION ===\n");
@@ -318,6 +486,9 @@ void print_auth_menu() {
     printf("======================\n");
 }
 
+/**
+ * @function print_friend_menu: Display the friend management menu options.
+ */
 void print_friend_menu() {
     printf("\n");
     printf("=== FRIEND MANAGEMENT ===\n");
@@ -330,6 +501,9 @@ void print_friend_menu() {
     printf("=========================\n");
 }
 
+/**
+ * @function print_group_menu: Display the group chat menu options.
+ */
 void print_group_menu() {
     printf("\n");
     printf("=== GROUP CHAT ===\n");
@@ -350,6 +524,16 @@ void print_group_menu() {
 // Message Parsing Utilities
 // ============================================================================
 
+/**
+ * @function parse_notification_field: Parse a field value from a notification message.
+ * 
+ * @param message The notification message string.
+ * @param field_name The name of the field to extract.
+ * @param output Buffer to store the extracted field value.
+ * @param max_len Maximum length of the output buffer.
+ * 
+ * @return 1 on success, 0 on failure.
+ */
 int parse_notification_field(const char *message, const char *field_name, char *output, size_t max_len) {
     char search_str[128];
     snprintf(search_str, sizeof(search_str), "%s=\"", field_name);
@@ -373,6 +557,13 @@ int parse_notification_field(const char *message, const char *field_name, char *
 // Notification Handlers
 // ============================================================================
 
+/**
+ * @function display_group_invite_notification: Display group invitation notification.
+ * 
+ * @param message The notification message.
+ * 
+ * @return void
+ */
 void display_group_invite_notification(const char *message) {
     int group_id = 0;
     char group_name[128] = {0};
@@ -393,6 +584,13 @@ void display_group_invite_notification(const char *message) {
     printf("\n");
 }
 
+/**
+ * @function display_offline_notification: Display offline message notification.
+ * 
+ * @param message The notification message.
+ * 
+ * @return void
+ */
 void display_offline_notification(const char *message) {
     char type[64] = {0};
     char notif_msg[512] = {0};
@@ -410,6 +608,13 @@ void display_offline_notification(const char *message) {
     printf("\n");
 }
 
+/**
+ * @function display_group_kick_notification: Display group kick notification.
+ * 
+ * @param message The notification message.
+ * 
+ * @return void
+ */
 void display_group_kick_notification(const char *message) {
     int group_id = 0;
     char group_name[128] = {0};
@@ -430,6 +635,13 @@ void display_group_kick_notification(const char *message) {
     printf("\n");
 }
 
+/**
+ * @function display_group_join_request_notification: Display group join request notification.
+ * 
+ * @param message The notification message.
+ * 
+ * @return void
+ */
 void display_group_join_request_notification(const char *message) {
     int group_id = 0;
     char group_name[128] = {0};
@@ -450,32 +662,17 @@ void display_group_join_request_notification(const char *message) {
     printf("  From: %s\n", requester);
 }
 
-void display_group_join_result_notification(const char *message, int approved) {
-    int group_id = 0;
-    char group_name[128] = {0};
-    
-    const char *id_start = strstr(message, "group_id=");
-    if (id_start) {
-        sscanf(id_start, "group_id=%d", &group_id);
-    }
-    
-    parse_notification_field(message, "group_name", group_name, sizeof(group_name));
-    
-    printf("\n");
-    if (approved) {
-        printf("✓ JOIN REQUEST APPROVED\n");
-        printf("You can now chat in group '%s' (ID: %d)\n", group_name, group_id);
-    } else {
-        printf("✗ JOIN REQUEST REJECTED\n");
-        printf("Your request to join '%s' was rejected\n", group_name);
-    }
-    printf("\n");
-}
-
 // ============================================================================
 // Authentication Handlers
 // ============================================================================
 
+/**
+ * @function handle_register: Handle user registration process.
+ * 
+ * @param client Pointer to ClientConn structure.
+ * 
+ * @return 0 on success, 1 on failure.
+ */
 int handle_register(ClientConn *client) {
     printf("\n--- REGISTER ---\n");
     printf("Enter username: ");
@@ -505,6 +702,13 @@ int handle_register(ClientConn *client) {
     return result;
 }
 
+/**
+ * @function handle_login: Handle user login process.
+ * 
+ * @param client Pointer to ClientConn structure.
+ * 
+ * @return 0 on success, 1 on failure.
+ */
 int handle_login(ClientConn *client) {
     printf("\n--- LOGIN ---\n");
     printf("Enter username: ");
@@ -540,6 +744,13 @@ int handle_login(ClientConn *client) {
     return result;
 }
 
+/**
+ * @function handle_logout: Handle user logout process.
+ * 
+ * @param client Pointer to ClientConn structure.
+ * 
+ * @return 0 on success, 1 on failure.
+ */
 int handle_logout(ClientConn *client) {
     printf("\n--- LOGOUT ---\n");
     send_message(client, "LOGOUT");
@@ -550,6 +761,13 @@ int handle_logout(ClientConn *client) {
 // Friend Management Handlers
 // ============================================================================
 
+/**
+ * @function handle_friend_req: Handle sending a friend request.
+ * 
+ * @param client Pointer to ClientConn structure.
+ * 
+ * @return 0 on success, 1 on failure.
+ */
 int handle_friend_req(ClientConn *client) {
     printf("\n--- SEND FRIEND REQUEST ---\n");
     printf("Enter username to send friend request: ");
@@ -576,6 +794,13 @@ int handle_friend_req(ClientConn *client) {
     return result;
 }
 
+/**
+ * @function handle_friend_accept: Handle accepting a friend request.
+ * 
+ * @param client Pointer to ClientConn structure.
+ * 
+ * @return 0 on success, 1 on failure.
+ */
 int handle_friend_accept(ClientConn *client) {
     printf("\n--- ACCEPT FRIEND REQUEST ---\n");
 
@@ -611,6 +836,13 @@ int handle_friend_accept(ClientConn *client) {
     return result;
 }
 
+/**
+ * @function handle_friend_decline: Handle declining a friend request.
+ * 
+ * @param client Pointer to ClientConn structure.
+ * 
+ * @return 0 on success, 1 on failure.
+ */
 int handle_friend_decline(ClientConn *client) {
     printf("\n--- DECLINE FRIEND REQUEST ---\n");
 
@@ -646,6 +878,13 @@ int handle_friend_decline(ClientConn *client) {
     return result;
 }
 
+/**
+ * @function handle_friend_remove: Handle removing a friend.
+ * 
+ * @param client Pointer to ClientConn structure.
+ * 
+ * @return 0 on success, 1 on failure.
+ */
 int handle_friend_remove(ClientConn *client) {
     printf("\n--- REMOVE FRIEND ---\n");
 
@@ -695,6 +934,13 @@ int handle_friend_remove(ClientConn *client) {
     return result;
 }
 
+/**
+ * @function handle_friend_list: Handle displaying the friend list.
+ * 
+ * @param client Pointer to ClientConn structure.
+ * 
+ * @return 0 on success, 1 on failure.
+ */
 int handle_friend_list(ClientConn *client) {
     printf("\n--- MY FRIEND LIST ---\n");
     
@@ -715,6 +961,13 @@ int handle_friend_list(ClientConn *client) {
 // Messaging Handler
 // ============================================================================
 
+/**
+ * @function handle_messaging_mode: Handle direct messaging mode with a friend.
+ * 
+ * @param client Pointer to ClientConn structure.
+ * 
+ * @return 0 on success, 1 on failure.
+ */
 int handle_messaging_mode(ClientConn *client) {
     printf("\n--- DIRECT MESSAGING MODE ---\n");
     
@@ -907,6 +1160,13 @@ int handle_messaging_mode(ClientConn *client) {
 // Group Chat Handlers
 // ============================================================================
 
+/**
+ * @function handle_group_create: Handle creating a new group.
+ * 
+ * @param client Pointer to ClientConn structure.
+ * 
+ * @return void
+ */
 void handle_group_create(ClientConn *client) {
     printf("\n--- CREATE GROUP ---\n");
     printf("Enter group name: ");
@@ -925,6 +1185,13 @@ void handle_group_create(ClientConn *client) {
     free(group_name);
 }
 
+/**
+ * @function handle_group_invite: Handle inviting a user to a group.
+ * 
+ * @param client Pointer to ClientConn structure.
+ * 
+ * @return void
+ */
 void handle_group_invite(ClientConn *client) {
     printf("\n--- INVITE TO GROUP ---\n");
     printf("Enter group name: ");
@@ -953,6 +1220,13 @@ void handle_group_invite(ClientConn *client) {
     free(username);
 }
 
+/**
+ * @function handle_group_join: Handle requesting to join a group.
+ * 
+ * @param client Pointer to ClientConn structure.
+ * 
+ * @return void
+ */
 void handle_group_join(ClientConn *client) {
     printf("\n--- JOIN GROUP ---\n");
     printf("Enter group name to join: ");
@@ -972,6 +1246,13 @@ void handle_group_join(ClientConn *client) {
     free(group_name);
 }
 
+/**
+ * @function handle_group_create: Handle creating a new group.
+ * 
+ * @param client Pointer to ClientConn structure.
+ * 
+ * @return void
+ */
 void handle_group_leave(ClientConn *client) {
     printf("\n--- LEAVE GROUP ---\n");
     printf("Enter group name: ");
@@ -990,6 +1271,13 @@ void handle_group_leave(ClientConn *client) {
     free(group_name);
 }
 
+/**
+ * @function handle_group_kick: Handle kicking a user from a group.
+ * 
+ * @param client Pointer to ClientConn structure.
+ * 
+ * @return void
+ */
 void handle_group_kick(ClientConn *client) {
     printf("\n--- KICK FROM GROUP ---\n");
     printf("Enter group name: ");
@@ -1018,6 +1306,13 @@ void handle_group_kick(ClientConn *client) {
     free(username);
 }
 
+/**
+ * @function handle_group_msg: Handle group messaging mode.
+ * 
+ * @param client Pointer to ClientConn structure.
+ * 
+ * @return void
+ */
 void handle_group_msg(ClientConn *client) {
     printf("\n--- GROUP MESSAGING MODE ---\n");
     
@@ -1029,12 +1324,10 @@ void handle_group_msg(ClientConn *client) {
         return;
     }
     
-    // Trim whitespace
     char *trimmed_group = group_name;
     while (*trimmed_group == ' ' || *trimmed_group == '\t') 
         trimmed_group++;
-    
-    // Get offline messages first
+
     char get_offline_cmd[BUFFER_SIZE];
     snprintf(get_offline_cmd, sizeof(get_offline_cmd), "GROUP_SEND_OFFLINE_MSG %s", trimmed_group);
     send_message(client, get_offline_cmd);
@@ -1051,8 +1344,9 @@ void handle_group_msg(ClientConn *client) {
     fd_set read_fds;
     struct timeval timeout;
     char input_buffer[MAX_MESSAGE_LENGTH];
+    int should_exit = 0;
     
-    while (client->connected) {
+    while (client->connected && !should_exit) {
         FD_ZERO(&read_fds);
         FD_SET(STDIN_FILENO, &read_fds);
         FD_SET(client->sockfd, &read_fds);
@@ -1068,8 +1362,7 @@ void handle_group_msg(ClientConn *client) {
             perror("select() error");
             break;
         }
-        
-        // Handle messages from server
+
         if (FD_ISSET(client->sockfd, &read_fds)) {
             char buffer[BUFFER_SIZE];
             int bytes_received = recv(client->sockfd, buffer, sizeof(buffer) - 1, 0);
@@ -1094,7 +1387,6 @@ void handle_group_msg(ClientConn *client) {
             char *message;
             while ((message = stream_buffer_extract_message(client->recv_buffer)) != NULL) {
                 
-                // Handle notifications
                 if (strstr(message, "GROUP_INVITE_NOTIFICATION")) {
                     printf("\r\033[K");
                     display_group_invite_notification(message);
@@ -1110,33 +1402,27 @@ void handle_group_msg(ClientConn *client) {
                 else if (strstr(message, "GROUP_KICK_NOTIFICATION")) {
                     printf("\r\033[K");
                     display_group_kick_notification(message);
-                    // If kicked from current group, exit
                     if (strstr(message, trimmed_group)) {
                         printf("\nYou have been kicked from this group. Exiting...\n");
+                        should_exit = 1;
                         free(message);
-                        free(group_name);
-                        return;
+                        break;
                     }
                     printf("[\033[32mYou\033[0m]: ");
                     fflush(stdout);
                 }
-                // Handle group messages
                 else if (strstr(message, "GROUP_MSG")) {
-                    // Format: GROUP_MSG group_name sender: message_content
                     char *group_start = strstr(message, "GROUP_MSG ");
                     if (group_start) {
-                        group_start += 10; // Skip "GROUP_MSG "
+                        group_start += 10;
                         
-                        // Find group name (until space)
                         char *space = strchr(group_start, ' ');
                         if (space) {
                             int group_len = space - group_start;
                             char msg_group[128] = {0};
                             strncpy(msg_group, group_start, group_len);
                             
-                            // Check if it's for this group
                             if (strcmp(msg_group, trimmed_group) == 0) {
-                                // Find sender and message
                                 char *sender_start = space + 1;
                                 char *colon = strstr(sender_start, ": ");
                                 
@@ -1156,7 +1442,6 @@ void handle_group_msg(ClientConn *client) {
                         }
                     }
                 }
-                // Handle error codes
                 else if (strstr(message, "501")) {
                     printf("\r\033[K");
                     printf("Group '%s' not found!\n", trimmed_group);
@@ -1170,16 +1455,14 @@ void handle_group_msg(ClientConn *client) {
                     fflush(stdout);
                 }
                 else if (strstr(message, "118")) {
-                    // Parse và hiển thị các tin nhắn offline
-                    char *line = strtok(message, "\n");
-                    line = strtok(NULL, "\n"); // Skip status code line
+                    char *msg_copy = strdup(message);
+                    char *line = strtok(msg_copy, "\n");
+                    line = strtok(NULL, "\n");
                     
-                    printf("\r\033[K"); // Clear current line
+                    printf("\r\033[K");
                     
                     while (line != NULL) {
-                        // Check if it's a message line: [timestamp] sender: content
                         if (line[0] == '[') {
-                            // Extract timestamp
                             char *close_bracket = strchr(line, ']');
                             if (close_bracket) {
                                 char timestamp[32] = {0};
@@ -1188,8 +1471,7 @@ void handle_group_msg(ClientConn *client) {
                                     strncpy(timestamp, line + 1, ts_len);
                                 }
                                 
-                                // Extract sender and message
-                                char *sender_start = close_bracket + 2; // Skip "] "
+                                char *sender_start = close_bracket + 2;
                                 char *colon = strstr(sender_start, ": ");
                                 
                                 if (colon) {
@@ -1201,19 +1483,18 @@ void handle_group_msg(ClientConn *client) {
                                     
                                     char *msg_content = colon + 2;
                                     
-                                    // Display message với format đẹp
-                                    printf("\033[90m[%s]\033[0m ", timestamp); // Gray timestamp
+                                    printf("\033[90m[%s]\033[0m ", timestamp);
                                     printf("[\033[33m%s\033[0m]: %s\n", sender, msg_content);
                                 }
                             }
-                        } else {
-                            // Header hoặc footer lines
+                        }
+                        else {
                             printf("%s\n", line);
                         }
                         
                         line = strtok(NULL, "\n");
-                    }
-                    
+                    }                  
+                    free(msg_copy);
                     printf("[\033[32mYou\033[0m]: ");
                     fflush(stdout);
                 }
@@ -1221,7 +1502,6 @@ void handle_group_msg(ClientConn *client) {
             }
         }
         
-        // Handle user input
         if (FD_ISSET(STDIN_FILENO, &read_fds)) {
             if (fgets(input_buffer, sizeof(input_buffer), stdin) != NULL) {
                 size_t len = strlen(input_buffer);
@@ -1230,20 +1510,17 @@ void handle_group_msg(ClientConn *client) {
                     len--;
                 }
                 
-                // Exit chat
                 if (strcmp(input_buffer, "exit") == 0) {
                     printf("\nExiting group chat %s...\n", trimmed_group);
+                    should_exit = 1;
                     break;
                 }
-                
-                // Skip empty messages
                 if (len == 0) {
                     printf("[\033[32mYou\033[0m]: ");
                     fflush(stdout);
                     continue;
                 }
                 
-                // Check message length
                 if (len > MAX_MESSAGE_LENGTH - 1) {
                     printf("\r\033[K");
                     printf("Message too long! Maximum %d characters.\n", MAX_MESSAGE_LENGTH - 1);
@@ -1251,13 +1528,10 @@ void handle_group_msg(ClientConn *client) {
                     fflush(stdout);
                     continue;
                 }
-                
-                // Send group message
                 char message[BUFFER_SIZE];
                 snprintf(message, BUFFER_SIZE, "GROUP_MSG %s %s", trimmed_group, input_buffer);
                 send_message(client, message);
                 
-                // Reprint prompt
                 printf("\r\033[K");
                 printf("[\033[32mYou\033[0m]: ");
                 fflush(stdout);
@@ -1265,9 +1539,20 @@ void handle_group_msg(ClientConn *client) {
         }
     }
     
+    char exit_cmd[BUFFER_SIZE];
+    snprintf(exit_cmd, sizeof(exit_cmd), "GROUP_EXIT_MESSAGING %s", trimmed_group);
+    send_message(client, exit_cmd);
+    
     free(group_name);
 }
 
+/**
+ * @function handle_group_approve: Handle approving a user's join request to a group.
+ * 
+ * @param client Pointer to ClientConn structure.
+ * 
+ * @return void
+ */
 void handle_group_approve(ClientConn *client) {
     printf("\n--- APPROVE JOIN REQUEST ---\n");
     printf("Enter group name: ");
@@ -1295,6 +1580,13 @@ void handle_group_approve(ClientConn *client) {
     free(username);
 }
 
+/**
+ * @function handle_group_reject: Handle rejecting a user's join request to a group.
+ * 
+ * @param client Pointer to ClientConn structure.
+ * 
+ * @return void
+ */
 void handle_group_reject(ClientConn *client) {
     printf("\n--- REJECT JOIN REQUEST ---\n");
     printf("Enter group name: ");
@@ -1322,6 +1614,13 @@ void handle_group_reject(ClientConn *client) {
     free(username);
 }
 
+/**
+ * @function handle_list_join_requests: Handle listing join requests for a group.
+ * 
+ * @param client Pointer to ClientConn structure.
+ * 
+ * @return void
+ */
 void handle_list_join_requests(ClientConn *client) {
     printf("\n--- LIST JOIN REQUESTS ---\n");
     printf("Enter group name: ");

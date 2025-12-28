@@ -14,6 +14,13 @@
 // TASK 3: Register & Manage account
 // ============================================================================
 
+/**
+ * @function validate_username: Validate username format. 
+ * 
+ * @param username: The username to validate.
+ * 
+ * @return: 1 if valid, 0 otherwise.
+ **/
 int validate_username(const char *username) {
     if (!username) return 0;
     
@@ -29,6 +36,13 @@ int validate_username(const char *username) {
     return 1;
 }
 
+/**
+ * @function validate_password: Validate password format.
+ * 
+ * @param password: The password to validate.
+ * 
+ * @return: 1 if valid, 0 otherwise.
+ **/
 int validate_password(const char *password) {
     if (!password) return 0;
     
@@ -38,6 +52,14 @@ int validate_password(const char *password) {
     return 1;
 }
 
+/**
+ * @function hash_password: Hash password using SHA-256.
+ * 
+ * @param password: The password to hash.
+ * @param output: Buffer to store the resulting hash (must be at least 65 bytes
+ * 
+ * @return: None (void function).
+ */
 void hash_password(const char *password, char *output) {
     unsigned char hash[SHA256_DIGEST_LENGTH];
     SHA256((unsigned char*)password, strlen(password), hash);
@@ -48,6 +70,14 @@ void hash_password(const char *password, char *output) {
     output[SHA256_DIGEST_LENGTH * 2] = '\0';
 }
 
+/**
+ * @function user_exists: Check if a username already exists in the database.
+ * 
+ * @param conn: Pointer to the database connection.
+ * @param username: The username to check.
+ * 
+ * @return: 1 if exists, 0 otherwise.
+ */
 int user_exists(PGconn *conn, const char *username) {
     char query[256];
     snprintf(query, sizeof(query),
@@ -63,6 +93,15 @@ int user_exists(PGconn *conn, const char *username) {
     return count > 0;
 }
 
+/**
+ * @function register_user: Register a new user in the database.
+ * 
+ * @param conn: Pointer to the database connection.
+ * @param username: The username for the new user.
+ * @param password: The password for the new user.
+ * 
+ * @return: 1 if registration successful, 0 otherwise.
+ */
 int register_user(PGconn *conn, const char *username, const char *password) {
     if (!conn || !username || !password) return 0;
     
@@ -78,6 +117,15 @@ int register_user(PGconn *conn, const char *username, const char *password) {
     return execute_query(conn, query);
 }
 
+/**
+ * @function verify_login: Verify user login credentials.
+ * 
+ * @param conn: Pointer to the database connection.
+ * @param username: The username to verify.
+ * @param password: The password to verify.
+ * 
+ * @return: User ID if credentials are valid, -1 otherwise.
+ */
 int verify_login(PGconn *conn, const char *username, const char *password) {
     if (!conn || !username || !password) return -1;
     
@@ -104,6 +152,15 @@ int verify_login(PGconn *conn, const char *username, const char *password) {
     return match ? user_id : -1;
 }
 
+/**
+ * @function update_user_status: Update user's online status.
+ * 
+ * @param conn: Pointer to the database connection.
+ * @param user_id: The user ID to update.
+ * @param is_online: 1 to set online, 0 to set offline.
+ * 
+ * @return: 1 if update successful, 0 otherwise.
+ */
 int update_user_status(PGconn *conn, int user_id, int is_online) {
     char query[256];
     snprintf(query, sizeof(query),
@@ -113,10 +170,17 @@ int update_user_status(PGconn *conn, int user_id, int is_online) {
     return execute_query(conn, query);
 }
 
+/**
+ * @function check_auth: Check if client is authenticated.
+ * 
+ * @param client: Pointer to the client session.
+ * 
+ * @return: true if authenticated, false otherwise (sends error response).
+ **/
 bool check_auth(ClientSession *client) {
     if (!client->is_authenticated) {
         char *response = build_response(STATUS_NOT_LOGGED_IN, 
-            "NOT_LOGGED_IN - Please login first");
+            "Please login first");
         send_and_free(client, response);
         return false;
     }
@@ -126,6 +190,15 @@ bool check_auth(ClientSession *client) {
 // Command Handlers
 // ============================================================================
 
+/**
+ * @function handle_register_command: Handle user registration command.
+ * 
+ * @param server: Pointer to Server structure managing database connection.
+ * @param client: Pointer to the client session requesting registration.
+ * @param cmd: Pointer to parsed command containing registration details.
+ * 
+ * @return: None (void function).
+ */
 void handle_register_command(Server *server, ClientSession *client, ParsedCommand *cmd) {
     if (!server || !client || !cmd) return;
     
@@ -139,25 +212,25 @@ void handle_register_command(Server *server, ClientSession *client, ParsedComman
     }
     
     if (cmd->param_count < 2) {
-        response = build_response(STATUS_UNDEFINED_ERROR, "BAD_REQUEST - Username and password required");
+        response = build_response(STATUS_UNDEFINED_ERROR, "Username and password required");
         send_and_free(client, response);
         return;
     }
     
     if (!validate_username(cmd->username)) {
-        response = build_response(STATUS_INVALID_USERNAME, "INVALID_USERNAME - Username invalid");
+        response = build_response(STATUS_INVALID_USERNAME, "Username invalid");
         send_and_free(client, response);
         return;
     }
     
     if (!validate_password(cmd->password)) {
-        response = build_response(STATUS_INVALID_PASSWORD, "INVALID_PASSWORD - Password invalid");
+        response = build_response(STATUS_INVALID_PASSWORD, "Password invalid");
         send_and_free(client, response);
         return;
     }
     
     if (user_exists(server->db_conn, cmd->username)) {
-        response = build_response(STATUS_USERNAME_EXISTS, "USERNAME_EXISTS - Username already exists");
+        response = build_response(STATUS_USERNAME_EXISTS, "Username already exists");
         send_and_free(client, response);
         return;
     }
@@ -169,11 +242,20 @@ void handle_register_command(Server *server, ClientSession *client, ParsedComman
         send_and_free(client, response);
         printf("New user registered: %s\n", cmd->username);
     } else {
-        response = build_response(STATUS_DATABASE_ERROR, "UNKNOWN_ERROR - Failed to register user");
+        response = build_response(STATUS_DATABASE_ERROR, "Failed to register user");
         send_and_free(client, response);
     }
 }
 
+/**
+ * @function handle_login_command: Handle user login command.
+ * 
+ * @param server: Pointer to Server structure managing database connection.
+ * @param client: Pointer to the client session requesting login.
+ * @param cmd: Pointer to parsed command containing login details.
+ * 
+ * @return: None (void function).
+ */
 void handle_login_command(Server *server, ClientSession *client, ParsedCommand *cmd) {
     if (!server || !client || !cmd) return;
     
@@ -187,13 +269,13 @@ void handle_login_command(Server *server, ClientSession *client, ParsedCommand *
     }
     
     if (cmd->param_count < 2) {
-        response = build_response(STATUS_UNDEFINED_ERROR, "BAD_REQUEST - Username and password required");
+        response = build_response(STATUS_UNDEFINED_ERROR, "Username and password required");
         send_and_free(client, response);
         return;
     }
     
     if (server_get_client_by_username(server, cmd->username)) {
-        response = build_response(STATUS_ALREADY_LOGGED_IN, "ALREADY_LOGGED_IN - User already logged in from another session");
+        response = build_response(STATUS_ALREADY_LOGGED_IN, "User already logged in from another session");
         send_and_free(client, response);
         return;
     }
@@ -202,9 +284,9 @@ void handle_login_command(Server *server, ClientSession *client, ParsedCommand *
     
     if (user_id < 0) {
         if (user_exists(server->db_conn, cmd->username)) {
-            response = build_response(STATUS_WRONG_PASSWORD, "WRONG_PASSWORD - Incorrect password");
+            response = build_response(STATUS_WRONG_PASSWORD, "Incorrect password");
         } else {
-            response = build_response(STATUS_USER_NOT_FOUND, "USER_NOT_FOUND - User does not exist");
+            response = build_response(STATUS_USER_NOT_FOUND, "User does not exist");
         }
         send_and_free(client, response);
         return;
@@ -226,6 +308,15 @@ void handle_login_command(Server *server, ClientSession *client, ParsedCommand *
     send_pending_notifications(server, client);
 }
 
+/**
+ * @function handle_logout_command: Handle user logout command.
+ * 
+ * @param server: Pointer to Server structure managing database connection.
+ * @param client: Pointer to the client session requesting logout.
+ * @param cmd: Pointer to parsed command (not used here).
+ * 
+ * @return: None (void function).
+ */
 void handle_logout_command(Server *server, ClientSession *client, ParsedCommand *cmd) {
     if (!server || !client || !cmd) return;
     

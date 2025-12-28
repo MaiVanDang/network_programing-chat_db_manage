@@ -8,6 +8,11 @@
 // TASK 1: Stream Processing
 // ============================================================================
 
+/**
+ * @function stream_buffer_create: Creates and initializes a new StreamBuffer.
+ * 
+ * @return Pointer to the newly created StreamBuffer, or NULL on failure.
+ */
 StreamBuffer* stream_buffer_create() {
     StreamBuffer *buffer = (StreamBuffer*)malloc(sizeof(StreamBuffer));
     if (!buffer) return NULL;
@@ -19,12 +24,28 @@ StreamBuffer* stream_buffer_create() {
     return buffer;
 }
 
+/**
+ * @function stream_buffer_destroy: Frees the memory allocated for a StreamBuffer.
+ * 
+ * @param buffer Pointer to the StreamBuffer to be destroyed.
+ * 
+ * @return void
+ */
 void stream_buffer_destroy(StreamBuffer *buffer) {
     if (buffer) {
         free(buffer);
     }
 }
 
+/**
+ * @function stream_buffer_append: Appends data to the StreamBuffer.
+ * 
+ * @param buffer Pointer to the StreamBuffer.
+ * @param data Pointer to the data to append.
+ * @param len Length of the data to append.
+ * 
+ * @return 1 on success, 0 on failure (e.g., buffer overflow).
+ */
 int stream_buffer_append(StreamBuffer *buffer, const char *data, size_t len) {
     if (!buffer || !data) return 0;
     
@@ -40,6 +61,13 @@ int stream_buffer_append(StreamBuffer *buffer, const char *data, size_t len) {
     return 1;
 }
 
+/**
+ * @function stream_buffer_extract_message: Extracts a complete protocol message from the StreamBuffer.
+ * 
+ * @param buffer Pointer to the StreamBuffer.
+ * 
+ * @return Pointer to the extracted message (dynamically allocated), or NULL if no complete message is found.
+ */
 char* stream_buffer_extract_message(StreamBuffer *buffer) {
     if (!buffer || buffer->length == 0) return NULL;
     
@@ -68,6 +96,13 @@ char* stream_buffer_extract_message(StreamBuffer *buffer) {
 // Protocol Parsing Functions
 // ============================================================================
 
+/**
+ * @function parse_command_type: Parses the command type from a string.
+ * 
+ * @param cmd_str Pointer to the command string.
+ * 
+ * @return Corresponding CommandType enum value.
+ */
 CommandType parse_command_type(const char *cmd_str) {
     if (!cmd_str) return CMD_UNKNOWN;
     
@@ -97,6 +132,13 @@ CommandType parse_command_type(const char *cmd_str) {
     return CMD_UNKNOWN;
 }
 
+/**
+ * @function parse_protocol_message: Parses a raw protocol message into a ParsedCommand structure.
+ * 
+ * @param raw_message Pointer to the raw protocol message string.
+ * 
+ * @return Pointer to the ParsedCommand structure (dynamically allocated), or NULL on failure.
+ */
 ParsedCommand* parse_protocol_message(const char *raw_message) {
     if (!raw_message) return NULL;
     
@@ -148,7 +190,7 @@ ParsedCommand* parse_protocol_message(const char *raw_message) {
                 cmd->param_count++;
             }
             break;
-            
+        
         case CMD_MSG:
             token = strtok(NULL, " ");
             if (token) {
@@ -167,6 +209,7 @@ ParsedCommand* parse_protocol_message(const char *raw_message) {
         case CMD_GROUP_LEAVE:
         case CMD_LIST_JOIN_REQUESTS:
         case CMD_GROUP_SEND_OFFLINE_MSG:
+        case CMD_GROUP_EXIT_MESSAGING:
             token = strtok(NULL, " ");
             if (token) {
                 strncpy(cmd->group_name, token, MAX_USERNAME_LENGTH - 1);
@@ -216,6 +259,13 @@ ParsedCommand* parse_protocol_message(const char *raw_message) {
     return cmd;
 }
 
+/**
+ * @function free_parsed_command: Frees the memory allocated for a ParsedCommand structure.
+ * 
+ * @param cmd Pointer to the ParsedCommand structure to be freed.
+ * 
+ * @return void
+ */
 void free_parsed_command(ParsedCommand *cmd) {
     if (cmd) {
         free(cmd);
@@ -226,6 +276,14 @@ void free_parsed_command(ParsedCommand *cmd) {
 // Response Builders
 // ============================================================================
 
+/**
+ * @function build_response: Builds a protocol response message.
+ * 
+ * @param status_code Integer status code.
+ * @param message Pointer to the optional message string.
+ * 
+ * @return Pointer to the constructed response message (dynamically allocated), or NULL on failure.
+ */
 char* build_response(int status_code, const char *message) {
     char *response = (char*)malloc(MAX_MESSAGE_LENGTH);
     if (!response) return NULL;
@@ -241,6 +299,13 @@ char* build_response(int status_code, const char *message) {
     return response;
 }
 
+/**
+ * @function build_simple_response: Builds a simple protocol response message with only a status code.
+ * 
+ * @param status_code Integer status code.
+ * 
+ * @return Pointer to the constructed response message (dynamically allocated), or NULL on failure.
+ */
 char* build_simple_response(int status_code) {
     return build_response(status_code, "");
 }
