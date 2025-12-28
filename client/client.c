@@ -321,8 +321,8 @@ int check_server_messages(ClientConn *client) {
     int notification_count = 0;
     
     while ((message = stream_buffer_extract_message(client->recv_buffer)) != NULL) {
-        int displayed = 0; 
-        if (strstr(message, "118")) {
+        int displayed = 0;
+        if (strstr(message, "OFFLINE MESSAGES FROM GROUP")) {
             printf("\n");
             char *msg_copy = strdup(message);
             char *line = strtok(msg_copy, "\n");
@@ -363,6 +363,18 @@ int check_server_messages(ClientConn *client) {
             free(msg_copy);
             displayed = 1;
         }
+        else if (strstr(message, "NEW_MESSAGE from")) {
+            display_new_message_notification(message);
+            displayed = 1;
+        }
+        else if (strstr(message, "FRIEND_REQUEST_NOTIFICATION")) {
+            display_friend_request_notification(message);
+            displayed = 1;
+        }
+        else if (strstr(message, "FRIEND_ACCEPT_NOTIFICATION")) {
+            display_friend_accept_notification(message);
+            displayed = 1;
+        }
         else if (strstr(message, "GROUP_INVITE_NOTIFICATION")) {
             display_group_invite_notification(message);
             displayed = 1;
@@ -386,6 +398,12 @@ int check_server_messages(ClientConn *client) {
         else if (strstr(message, "GROUP_JOIN_REJECTED")) {
             display_group_join_result_notification(message, 0);
             displayed = 1;
+        }
+        else if (strstr(message, "SHOW OFFLINE MESSAGES")) {
+            const char *content = extract_message_content(message);
+            if (content && strlen(content) > 0) {
+                printf("[Server] %s\n", content);
+            }
         }
         
         free(message);
@@ -633,6 +651,69 @@ void display_group_kick_notification(const char *message) {
     printf("- ID: %d\n", group_id);
     printf("- Kicked by: %s\n", kicked_by);
     printf("\n");
+}
+
+/**
+ * @function display_new_message_notification: Display new message notification.
+ * 
+ * @param message The notification message.
+ * 
+ * @return void
+ */
+void display_new_message_notification(const char *message) {
+    // Parse: "NEW_MESSAGE from <sender>: <content>"
+    const char *from_marker = strstr(message, "from ");
+    if (!from_marker) return;
+    
+    from_marker += 5; // Skip "from "
+    const char *colon = strstr(from_marker, ": ");
+    if (!colon) return;
+    
+    char sender[64] = {0};
+    int sender_len = colon - from_marker;
+    if (sender_len > 0 && sender_len < 64) {
+        strncpy(sender, from_marker, sender_len);
+    }
+    
+    const char *msg_content = colon + 2;
+    
+    printf("\n\033[95m--- NEW MESSAGE ---\033[0m\n");
+    printf("From: \033[36m%s\033[0m\n", sender);
+    printf("Message: %s\n", msg_content);
+}
+
+/**
+ * @function display_friend_request_notification: Display friend request notification.
+ * 
+ * @param message The notification message.
+ * 
+ * @return void
+ */
+void display_friend_request_notification(const char *message) {
+    char from_user[64] = {0};
+    
+    parse_notification_field(message, "from_user", from_user, sizeof(from_user));
+    
+    printf("\n\033[96m--- NEW FRIEND REQUEST ---\033[0m\n");
+    printf("From: \033[33m%s\033[0m\n", from_user);
+
+}
+
+/**
+ * @function display_friend_accept_notification: Display friend accept notification.
+ * 
+ * @param message The notification message.
+ * 
+ * @return void
+ */
+void display_friend_accept_notification(const char *message) {
+    char accepter_user[64] = {0};
+    
+    parse_notification_field(message, "accepter_user", accepter_user, sizeof(accepter_user));
+    
+    printf("\n\033[92m--- FRIEND REQUEST ACCEPTED ---\033[0m\n");
+    printf("\033[33m%s\033[0m accepted your friend request!\n", accepter_user);
+
 }
 
 /**
@@ -1041,7 +1122,19 @@ int handle_messaging_mode(ClientConn *client) {
             char *message;
             while ((message = stream_buffer_extract_message(client->recv_buffer)) != NULL) {
 
-                if (strstr(message, "GROUP_INVITE_NOTIFICATION")) {
+                if (strstr(message, "FRIEND_REQUEST_NOTIFICATION")) {
+                    printf("\r\033[K"); 
+                    display_friend_request_notification(message);
+                    printf("[\033[32mYou\033[0m]: ");
+                    fflush(stdout);
+                }
+                else if (strstr(message, "FRIEND_ACCEPT_NOTIFICATION")) {
+                    printf("\r\033[K"); 
+                    display_friend_accept_notification(message);
+                    printf("[\033[32mYou\033[0m]: ");
+                    fflush(stdout);
+                }
+                else if (strstr(message, "GROUP_INVITE_NOTIFICATION")) {
                     printf("\r\033[K"); 
                     display_group_invite_notification(message);
                     printf("[\033[32mYou\033[0m]: ");
@@ -1060,12 +1153,21 @@ int handle_messaging_mode(ClientConn *client) {
                     fflush(stdout);
                 }
 
-                else if (strstr(message, "NEW_MESSAGE from") && strstr(message, trimmed_receiver)) {
-                    char *msg_start = strstr(message, ": ");
-                    if (msg_start) {
-                        msg_start += 2;
+                else if (strstr(message, "NEW_MESSAGE from")) {
+                    if (strstr(message, trimmed_receiver)) {
+                        // Message from the person we're chatting with
+                        char *msg_start = strstr(message, ": ");
+                        if (msg_start) {
+                            msg_start += 2;
+                            printf("\r\033[K");
+                            printf("[\033[36m%s\033[0m]: %s\n", trimmed_receiver, msg_start);
+                            printf("[\033[32mYou\033[0m]: ");
+                            fflush(stdout);
+                        }
+                    } else {
+                        // Message from someone else - show notification
                         printf("\r\033[K");
-                        printf("[\033[36m%s\033[0m]: %s\n", trimmed_receiver, msg_start);
+                        display_new_message_notification(message);
                         printf("[\033[32mYou\033[0m]: ");
                         fflush(stdout);
                     }
@@ -1387,7 +1489,19 @@ void handle_group_msg(ClientConn *client) {
             char *message;
             while ((message = stream_buffer_extract_message(client->recv_buffer)) != NULL) {
                 
-                if (strstr(message, "GROUP_INVITE_NOTIFICATION")) {
+                if (strstr(message, "FRIEND_REQUEST_NOTIFICATION")) {
+                    printf("\r\033[K");
+                    display_friend_request_notification(message);
+                    printf("[\033[32mYou\033[0m]: ");
+                    fflush(stdout);
+                }
+                else if (strstr(message, "FRIEND_ACCEPT_NOTIFICATION")) {
+                    printf("\r\033[K");
+                    display_friend_accept_notification(message);
+                    printf("[\033[32mYou\033[0m]: ");
+                    fflush(stdout);
+                }
+                else if (strstr(message, "GROUP_INVITE_NOTIFICATION")) {
                     printf("\r\033[K");
                     display_group_invite_notification(message);
                     printf("[\033[32mYou\033[0m]: ");
@@ -1396,6 +1510,12 @@ void handle_group_msg(ClientConn *client) {
                 else if (strstr(message, "OFFLINE_NOTIFICATION")) {
                     printf("\r\033[K");
                     display_offline_notification(message);
+                    printf("[\033[32mYou\033[0m]: ");
+                    fflush(stdout);
+                }
+                else if (strstr(message, "NEW_MESSAGE from")) {
+                    printf("\r\033[K");
+                    display_new_message_notification(message);
                     printf("[\033[32mYou\033[0m]: ");
                     fflush(stdout);
                 }
