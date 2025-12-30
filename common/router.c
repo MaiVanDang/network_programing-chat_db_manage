@@ -226,14 +226,70 @@ void server_handle_client_message(Server *server, ClientSession *client, const c
     if (client->last_response_code != initial_response_code) {
         snprintf(result_code, sizeof(result_code), "%d", client->last_response_code);
         
-        if (client->last_response_code >= 100 && client->last_response_code < 200) {
-            strcpy(result_detail, "Success");
-        } else if (client->last_response_code >= 200 && client->last_response_code < 400) {
-            strcpy(result_detail, "Client/Auth error");
-        } else if (client->last_response_code >= 400 && client->last_response_code < 500) {
-            strcpy(result_detail, "Database/Server error");
-        } else if (client->last_response_code >= 500) {
-            strcpy(result_detail, "System error");
+        switch (client->last_response_code) {
+            // Success codes (1xx)
+            case 101: strcpy(result_detail, "Register Success"); break;
+            case 102: strcpy(result_detail, "Login Success"); break;
+            case 103: strcpy(result_detail, "Logout Success"); break;
+            case 104: strcpy(result_detail, "Friend Request Sent"); break;
+            case 105: strcpy(result_detail, "Friend Request Accepted"); break;
+            case 106: strcpy(result_detail, "Friend Request Declined"); break;
+            case 107: strcpy(result_detail, "Friend Removed"); break;
+            case 108: strcpy(result_detail, "Friend List Retrieved"); break;
+            case 109: strcpy(result_detail, "Message Sent"); break;
+            case 110: strcpy(result_detail, "Group Created"); break;
+            case 111: strcpy(result_detail, "Group Invite Sent"); break;
+            case 112: strcpy(result_detail, "Group Joined"); break;
+            case 113: strcpy(result_detail, "Group Left"); break;
+            case 114: strcpy(result_detail, "Member Kicked"); break;
+            case 115: strcpy(result_detail, "Group Message Sent"); break;
+            case 116: strcpy(result_detail, "Offline Message Retrieved"); break;
+            case 117: strcpy(result_detail, "Pending Requests Retrieved"); break;
+            case 118: strcpy(result_detail, "Offline Messages Retrieved"); break;
+            case 119: strcpy(result_detail, "Join Request Sent"); break;
+            case 120: strcpy(result_detail, "Join Request Approved"); break;
+            case 121: strcpy(result_detail, "Join Request Rejected"); break;
+            case 122: strcpy(result_detail, "Group Message Sent Success"); break;
+            
+            // Client errors (2xx)
+            case 201: strcpy(result_detail, "Username Already Exists"); break;
+            case 202: strcpy(result_detail, "Wrong Password"); break;
+            case 216: strcpy(result_detail, "Group Join Request Notification"); break;
+            case 217: strcpy(result_detail, "Group Join Approved Notification"); break;
+            case 218: strcpy(result_detail, "No Offline Messages"); break;
+            case 219: strcpy(result_detail, "Group Join Rejected Notification"); break;
+            case 250: strcpy(result_detail, "Group Invite Notification"); break;
+            case 251: strcpy(result_detail, "User Offline Notification"); break;
+            case 252: strcpy(result_detail, "Group Kick Notification"); break;
+            
+            // Auth/Session errors (3xx)
+            case 301: strcpy(result_detail, "Invalid Username"); break;
+            case 302: strcpy(result_detail, "Invalid Password"); break;
+            case 303: strcpy(result_detail, "User Not Found"); break;
+            case 304: strcpy(result_detail, "Already Logged In"); break;
+            case 305: strcpy(result_detail, "Not Logged In"); break;
+            case 306: strcpy(result_detail, "Already Friends"); break;
+            
+            // Database/Server errors (4xx)
+            case 400: strcpy(result_detail, "Database Error"); break;
+            case 401: strcpy(result_detail, "Request Already Pending"); break;
+            case 402: strcpy(result_detail, "No Pending Request"); break;
+            case 403: strcpy(result_detail, "Not Friends"); break;
+            case 413: strcpy(result_detail, "User Offline"); break;
+            case 414: strcpy(result_detail, "Message Too Long"); break;
+            case 415: strcpy(result_detail, "Group Already Exists"); break;
+            case 416: strcpy(result_detail, "Invalid Group Name"); break;
+            case 417: strcpy(result_detail, "Not Group Owner"); break;
+            case 418: strcpy(result_detail, "Already In Group"); break;
+            case 419: strcpy(result_detail, "Group Not Found"); break;
+            case 420: strcpy(result_detail, "Invite Required"); break;
+            case 421: strcpy(result_detail, "Not In Group"); break;
+            case 422: strcpy(result_detail, "Cannot Kick Owner"); break;
+            
+            // System errors (5xx)
+            case 500: strcpy(result_detail, "Undefined Error"); break;
+            
+            default: strcpy(result_detail, "Unknown Status Code"); break;
         }
     }
     
