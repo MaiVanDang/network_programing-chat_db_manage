@@ -4,7 +4,7 @@
 #include "../server/server.h"
 #include "../common/protocol.h"
 
-// Hàm xử lý chính
+// Main handler functions
 void handle_send_message(Server *server, ClientSession *client, ParsedCommand *cmd);
 void handle_get_offline_messages(Server *server, ClientSession *client, ParsedCommand *cmd);
 

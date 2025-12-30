@@ -267,19 +267,26 @@ void handle_send_message(Server *server, ClientSession *client, ParsedCommand *c
     }
     printf("DEBUG: Message saved to database - OK\n");
     
+    // Set current chat partner for both sender and receiver
+    strncpy(client->current_chat_partner, receiver_username, MAX_USERNAME_LENGTH - 1);
+    
     // Check if receiver is online
     ClientSession *receiver_client = find_client_by_user_id(server, receiver_id);
     
     if (receiver_client && receiver_client->is_authenticated) {
-        // Receiver đang online - Forward message realtime
+        // Receiver is online - Forward message realtime
         printf("DEBUG: Receiver is ONLINE - Forwarding message\n");
+        
+        // Set chat partner for receiver as well
+        strncpy(receiver_client->current_chat_partner, client->username, MAX_USERNAME_LENGTH - 1);
+        
         forward_message_to_online_user(server, receiver_id, client->username, message_text);
         
         // Update message as delivered (receiver is online)
         mark_message_as_delivered(server->db_conn, client->user_id, receiver_id, message_text);
         response = build_response(STATUS_MSG_OK, "OK - Message sent successfully (delivered)");
     } else {
-        // Receiver offline - Chỉ lưu database (is_read = FALSE by default)
+        // Receiver offline - Only save to database (is_read = FALSE by default)
         printf("DEBUG: Receiver is OFFLINE - Message saved for later\n");
         response = build_response(STATUS_OFFLINE_MSG_OK, "OK - Message sent successfully (stored for offline)");
     }
@@ -332,7 +339,7 @@ int save_message_to_database(PGconn *conn, int sender_id, int receiver_id, const
     // Use parameterized query to avoid SQL injection and escape errors
     const char *query = "INSERT INTO messages (sender_id, receiver_id, content) VALUES ($1, $2, $3)";
     
-    // Chuyển int thành string
+    // Convert int to string
     char sender_str[32], receiver_str[32];
     snprintf(sender_str, sizeof(sender_str), "%d", sender_id);
     snprintf(receiver_str, sizeof(receiver_str), "%d", receiver_id);
@@ -370,13 +377,13 @@ int forward_message_to_online_user(Server *server, int receiver_id, const char *
     
     printf("DEBUG: Forwarding message to online user ID:%d\n", receiver_id);
     
-    // Tạo notification message
+    // Create notification message
     char notification[BUFFER_SIZE];
     snprintf(notification, sizeof(notification),
             "NEW_MESSAGE from %s: %s",
             sender_username, message_text);
     
-    // Gửi notification đến receiver với status code 201
+    // Send notification to receiver with status code 201
     char *response = build_response(201, notification);
     server_send_response(receiver_client, response);
     free(response);

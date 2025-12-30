@@ -20,6 +20,7 @@ typedef struct {
     int last_response_code;
     StreamBuffer *recv_buffer;
     time_t last_activity;
+    char current_chat_partner[MAX_USERNAME_LENGTH];  // Track who user is chatting with
 } ClientSession;
 
 // Server structure
@@ -57,6 +58,9 @@ int server_broadcast_to_group(Server *server, int group_id, const char *message,
 // Logging
 void log_activity(const char *username, const char *cmd_code, const char *cmd_detail, 
                   const char *result_code, const char *result_detail);
+
+// Notification
+void notify_partner_offline(Server *server, const char *offline_username);
 
 // Command handlers
 void server_handle_client_message(Server *server, ClientSession *client, const char *message);

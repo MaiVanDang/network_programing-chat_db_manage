@@ -13,7 +13,7 @@
 void handle_friend_request(Server *server, ClientSession *client, ParsedCommand *cmd) {
     char *response = NULL;
     
-    // Kiểm tra đã login chưa
+    // Check if logged in
     if (!client->is_authenticated) {
         response = build_response(STATUS_NOT_LOGGED_IN, "NOT_LOGGED_IN - Please login first");
         server_send_response(client, response);
@@ -21,7 +21,7 @@ void handle_friend_request(Server *server, ClientSession *client, ParsedCommand 
         return;
     }
     
-    // Lấy username từ ParsedCommand->target_user
+    // Get username from ParsedCommand->target_user
     const char *target_username = cmd->target_user;
     if (!target_username || strlen(target_username) == 0) {
         response = build_response(STATUS_UNDEFINED_ERROR, "BAD_REQUEST - Username required");
@@ -30,7 +30,7 @@ void handle_friend_request(Server *server, ClientSession *client, ParsedCommand 
         return;
     }
     
-    // Copy và clean username
+    // Copy and clean username
     char username_clean[256];
     const char *src = target_username;
     
@@ -53,7 +53,7 @@ void handle_friend_request(Server *server, ClientSession *client, ParsedCommand 
     
     printf("DEBUG: Searching for user '%s'\n", username_clean);
     
-    // Kiểm tra user có tồn tại không
+    // Check if user exists
     char query[512];
     snprintf(query, sizeof(query),
             "SELECT id FROM users WHERE username = '%s'",
@@ -73,7 +73,7 @@ void handle_friend_request(Server *server, ClientSession *client, ParsedCommand 
     printf("DEBUG: Found user '%s' with ID: %d\n", username_clean, target_user_id);
     PQclear(res);
     
-    // Không thể gửi lời mời cho chính mình
+    // Cannot send friend request to yourself
     if (target_user_id == client->user_id) {
         response = build_response(STATUS_UNDEFINED_ERROR, "BAD_REQUEST - Cannot send friend request to yourself");
         server_send_response(client, response);
@@ -81,7 +81,7 @@ void handle_friend_request(Server *server, ClientSession *client, ParsedCommand 
         return;
     }
     
-    // Kiểm tra đã là bạn bè chưa
+    // Check if already friends
     snprintf(query, sizeof(query),
             "SELECT id FROM friends WHERE "
             "((user_id = %d AND friend_id = %d) OR (user_id = %d AND friend_id = %d)) "
@@ -98,7 +98,7 @@ void handle_friend_request(Server *server, ClientSession *client, ParsedCommand 
     }
     if (res) PQclear(res);
     
-    // Kiểm tra lời mời đang chờ xử lý
+    // Check for pending friend request
     snprintf(query, sizeof(query),
             "SELECT id FROM friends WHERE "
             "((user_id = %d AND friend_id = %d) OR (user_id = %d AND friend_id = %d)) "
@@ -115,7 +115,7 @@ void handle_friend_request(Server *server, ClientSession *client, ParsedCommand 
     }
     if (res) PQclear(res);
     
-    // Tạo lời mời kết bạn
+    // Create friend request
     snprintf(query, sizeof(query),
             "INSERT INTO friends (user_id, friend_id, status, created_at) "
             "VALUES (%d, %d, 'pending', NOW())",
@@ -128,15 +128,15 @@ void handle_friend_request(Server *server, ClientSession *client, ParsedCommand 
         return;
     }
     
-    // Gửi phản hồi thành công
-    char success_msg[256];
+    // Send success response
+    char success_msg[512];
     snprintf(success_msg, sizeof(success_msg),
-            "Friend request sent to %s successfully", username_clean);
-    response = build_response(STATUS_FRIEND_REQ_OK, success_msg);
+            "Friend request sent to %s successfully", username);
+    char *response = build_response(STATUS_FRIEND_REQ_OK, success_msg);
     server_send_response(client, response);
     free(response);
     
-    // Thông báo cho user nhận lời mời (nếu đang online)
+    // Notify the target user (if online)
     // ClientSession *target_client = server_get_client_by_username(server, username_clean);
     // if (target_client && target_client->is_authenticated) {
     //     char notification[256];
@@ -153,7 +153,7 @@ void handle_friend_request(Server *server, ClientSession *client, ParsedCommand 
 void handle_friend_pending(Server *server, ClientSession *client, ParsedCommand *cmd) {
     char *response = NULL;
     
-    // Kiểm tra đã login chưa
+    // Check if logged in
     if (!client->is_authenticated) {
         response = build_response(STATUS_NOT_LOGGED_IN, "NOT_LOGGED_IN - Please login first");
         server_send_response(client, response);
@@ -161,7 +161,7 @@ void handle_friend_pending(Server *server, ClientSession *client, ParsedCommand 
         return;
     }
     
-    // Query để lấy danh sách pending friend requests
+    // Query to get list of pending friend requests
     char query[512];
     snprintf(query, sizeof(query),
             "SELECT u.username, f.created_at "
@@ -191,7 +191,7 @@ void handle_friend_pending(Server *server, ClientSession *client, ParsedCommand 
         return;
     }
     
-    // Tạo response dạng bảng
+    // Create response in table format
     char pending_list[BUFFER_SIZE];
     int offset = 0;
     
@@ -232,7 +232,7 @@ void handle_friend_pending(Server *server, ClientSession *client, ParsedCommand 
 void handle_friend_accept(Server *server, ClientSession *client, ParsedCommand *cmd) {
     char *response = NULL;
     
-    // Kiểm tra đã login chưa
+    // Check if logged in
     if (!client->is_authenticated) {
         response = build_response(STATUS_NOT_LOGGED_IN, "NOT_LOGGED_IN - Please login first");
         server_send_response(client, response);
@@ -240,7 +240,7 @@ void handle_friend_accept(Server *server, ClientSession *client, ParsedCommand *
         return;
     }
     
-    // Lấy username từ ParsedCommand->target_user
+    // Get username from ParsedCommand->target_user
     const char *requester_username = cmd->target_user;
     if (!requester_username || strlen(requester_username) == 0) {
         response = build_response(STATUS_UNDEFINED_ERROR, "BAD_REQUEST - Username required");
@@ -249,7 +249,7 @@ void handle_friend_accept(Server *server, ClientSession *client, ParsedCommand *
         return;
     }
     
-    // Copy và clean username
+    // Copy and clean username
     char username_clean[256];
     const char *src = requester_username;
     
@@ -272,7 +272,7 @@ void handle_friend_accept(Server *server, ClientSession *client, ParsedCommand *
     
     printf("DEBUG: Accepting friend request from '%s'\n", username_clean);
     
-    // Kiểm tra user có tồn tại không
+    // Check if user exists
     char query[512];
     snprintf(query, sizeof(query),
             "SELECT id FROM users WHERE username = '%s'",
@@ -292,7 +292,7 @@ void handle_friend_accept(Server *server, ClientSession *client, ParsedCommand *
     printf("DEBUG: Found requester user '%s' with ID: %d\n", username_clean, requester_user_id);
     PQclear(res);
     
-    // Kiểm tra có lời mời pending không (requester_user_id gửi cho client->user_id)
+    // Check for pending request (requester_user_id sent to client->user_id)
     snprintf(query, sizeof(query),
             "SELECT id FROM friends WHERE "
             "user_id = %d AND friend_id = %d AND status = 'pending'",
@@ -312,7 +312,7 @@ void handle_friend_accept(Server *server, ClientSession *client, ParsedCommand *
     printf("DEBUG: Found pending request ID: %d\n", friend_request_id);
     PQclear(res);
     
-    // Cập nhật status thành 'accepted'
+    // Update status to 'accepted'
     snprintf(query, sizeof(query),
             "UPDATE friends SET status = 'accepted', created_at = NOW() "
             "WHERE id = %d",
@@ -325,15 +325,15 @@ void handle_friend_accept(Server *server, ClientSession *client, ParsedCommand *
         return;
     }
     
-    // Gửi phản hồi thành công
-    char success_msg[256];
+    // Send success response
+    char success_msg[512];
     snprintf(success_msg, sizeof(success_msg),
-            "Friend request from %s accepted successfully", username_clean);
-    response = build_response(STATUS_FRIEND_ACCEPT_OK, success_msg);
+            "Friend request from %s accepted successfully", username);
+    char *response = build_response(STATUS_FRIEND_ACCEPT_OK, success_msg);
     server_send_response(client, response);
     free(response);
     
-    // Thông báo cho người gửi lời mời (nếu đang online)
+    // Notify the requester (if online)
     // ClientSession *requester_client = server_get_client_by_username(server, username_clean);
     // if (requester_client && requester_client->is_authenticated) {
     //     char notification[256];
@@ -350,7 +350,7 @@ void handle_friend_accept(Server *server, ClientSession *client, ParsedCommand *
 void handle_friend_decline(Server *server, ClientSession *client, ParsedCommand *cmd) {
     char *response = NULL;
     
-    // Kiểm tra đã login chưa
+    // Check if logged in
     if (!client->is_authenticated) {
         response = build_response(STATUS_NOT_LOGGED_IN, "NOT_LOGGED_IN - Please login first");
         server_send_response(client, response);
@@ -358,7 +358,7 @@ void handle_friend_decline(Server *server, ClientSession *client, ParsedCommand 
         return;
     }
     
-    // Lấy username từ ParsedCommand->target_user
+    // Get username from ParsedCommand->target_user
     const char *requester_username = cmd->target_user;
     if (!requester_username || strlen(requester_username) == 0) {
         response = build_response(STATUS_UNDEFINED_ERROR, "BAD_REQUEST - Username required");
@@ -367,7 +367,7 @@ void handle_friend_decline(Server *server, ClientSession *client, ParsedCommand 
         return;
     }
     
-    // Copy và clean username
+    // Copy and clean username
     char username_clean[256];
     const char *src = requester_username;
     
@@ -390,7 +390,7 @@ void handle_friend_decline(Server *server, ClientSession *client, ParsedCommand 
     
     printf("DEBUG: Declining friend request from '%s'\n", username_clean);
     
-    // Kiểm tra user có tồn tại không
+    // Check if user exists
     char query[512];
     snprintf(query, sizeof(query),
             "SELECT id FROM users WHERE username = '%s'",
@@ -410,7 +410,7 @@ void handle_friend_decline(Server *server, ClientSession *client, ParsedCommand 
     printf("DEBUG: Found requester user '%s' with ID: %d\n", username_clean, requester_user_id);
     PQclear(res);
     
-    // Kiểm tra có lời mời pending không (requester_user_id gửi cho client->user_id)
+    // Check for pending request (requester_user_id sent to client->user_id)
     snprintf(query, sizeof(query),
             "SELECT id FROM friends WHERE "
             "user_id = %d AND friend_id = %d AND status = 'pending'",
@@ -430,7 +430,7 @@ void handle_friend_decline(Server *server, ClientSession *client, ParsedCommand 
     printf("DEBUG: Found pending request ID: %d\n", friend_request_id);
     PQclear(res);
     
-    // Xóa lời mời kết bạn (decline = delete)
+    // Delete friend request (decline = delete)
     snprintf(query, sizeof(query),
             "DELETE FROM friends WHERE id = %d",
             friend_request_id);
@@ -442,7 +442,7 @@ void handle_friend_decline(Server *server, ClientSession *client, ParsedCommand 
         return;
     }
     
-    // Gửi phản hồi thành công
+    // Send success response
     char success_msg[256];
     snprintf(success_msg, sizeof(success_msg),
             "Friend request from %s declined successfully", username_clean);
@@ -450,7 +450,7 @@ void handle_friend_decline(Server *server, ClientSession *client, ParsedCommand 
     server_send_response(client, response);
     free(response);
     
-    // Thông báo cho người gửi lời mời (nếu đang online) - tùy chọn
+    // Notify the requester (if online) - optional
     // ClientSession *requester_client = server_get_client_by_username(server, username_clean);
     // if (requester_client && requester_client->is_authenticated) {
     //     char notification[256];
@@ -467,7 +467,7 @@ void handle_friend_decline(Server *server, ClientSession *client, ParsedCommand 
 void handle_friend_remove(Server *server, ClientSession *client, ParsedCommand *cmd) {
     char *response = NULL;
     
-    // Kiểm tra đã login chưa
+    // Check if logged in
     if (!client->is_authenticated) {
         response = build_response(STATUS_NOT_LOGGED_IN, "NOT_LOGGED_IN - Please login first");
         server_send_response(client, response);
@@ -475,7 +475,7 @@ void handle_friend_remove(Server *server, ClientSession *client, ParsedCommand *
         return;
     }
     
-    // Lấy username từ ParsedCommand->target_user
+    // Get username from ParsedCommand->target_user
     const char *friend_username = cmd->target_user;
     if (!friend_username || strlen(friend_username) == 0) {
         response = build_response(STATUS_UNDEFINED_ERROR, "UNDEFINED_ERROR - Username required");
@@ -484,7 +484,7 @@ void handle_friend_remove(Server *server, ClientSession *client, ParsedCommand *
         return;
     }
     
-    // Copy và clean username
+    // Copy and clean username
     char username_clean[256];
     const char *src = friend_username;
     
@@ -507,7 +507,7 @@ void handle_friend_remove(Server *server, ClientSession *client, ParsedCommand *
     
     printf("DEBUG: Removing friend '%s'\n", username_clean);
     
-    // Kiểm tra user có tồn tại không
+    // Check if user exists
     char query[512];
     snprintf(query, sizeof(query),
             "SELECT id FROM users WHERE username = '%s'",
@@ -527,7 +527,7 @@ void handle_friend_remove(Server *server, ClientSession *client, ParsedCommand *
     printf("DEBUG: Found user '%s' with ID: %d\n", username_clean, friend_user_id);
     PQclear(res);
     
-    // Không thể remove chính mình
+    // Cannot remove yourself
     if (friend_user_id == client->user_id) {
         response = build_response(STATUS_UNDEFINED_ERROR, "UNDEFINED_ERROR - Cannot remove yourself");
         server_send_response(client, response);
@@ -535,8 +535,8 @@ void handle_friend_remove(Server *server, ClientSession *client, ParsedCommand *
         return;
     }
     
-    // Kiểm tra có phải bạn bè không (status = 'accepted')
-    // Kiểm tra cả 2 chiều: (A->B) hoặc (B->A)
+    // Check if friends (status = 'accepted')
+    // Check both directions: (A->B) or (B->A)
     snprintf(query, sizeof(query),
             "SELECT id FROM friends WHERE "
             "((user_id = %d AND friend_id = %d) OR (user_id = %d AND friend_id = %d)) "
@@ -557,7 +557,7 @@ void handle_friend_remove(Server *server, ClientSession *client, ParsedCommand *
     printf("DEBUG: Found friendship ID: %d\n", friendship_id);
     PQclear(res);
     
-    // Xóa mối quan hệ bạn bè
+    // Delete friendship relationship
     snprintf(query, sizeof(query),
             "DELETE FROM friends WHERE id = %d",
             friendship_id);
@@ -569,7 +569,7 @@ void handle_friend_remove(Server *server, ClientSession *client, ParsedCommand *
         return;
     }
     
-    // Gửi phản hồi thành công
+    // Send success response
     char success_msg[256];
     snprintf(success_msg, sizeof(success_msg),
             "Successfully removed %s from your friend list", username_clean);
@@ -577,7 +577,7 @@ void handle_friend_remove(Server *server, ClientSession *client, ParsedCommand *
     server_send_response(client, response);
     free(response);
     
-    // Thông báo cho người bị unfriend (nếu đang online)
+    // Notify the unfriended user (if online)
     // ClientSession *friend_client = server_get_client_by_username(server, username_clean);
     // if (friend_client && friend_client->is_authenticated) {
     //     char notification[256];
@@ -591,10 +591,10 @@ void handle_friend_remove(Server *server, ClientSession *client, ParsedCommand *
     printf("Friend removed: %s unfriended %s\n", client->username, username_clean);
 }
 
-void handle_friend_list(Server *server, ClientSession *client) {  // BỎ ParsedCommand *cmd
+void handle_friend_list(Server *server, ClientSession *client) {  // Removed ParsedCommand *cmd
     char *response = NULL;
     
-    // Kiểm tra đã login chưa
+    // Check if logged in
     if (!client->is_authenticated) {
         response = build_response(STATUS_NOT_LOGGED_IN, "NOT_LOGGED_IN - Please login first");
         server_send_response(client, response);
@@ -602,7 +602,7 @@ void handle_friend_list(Server *server, ClientSession *client) {  // BỎ Parsed
         return;
     }
     
-    // Query để lấy danh sách bạn bè (status = 'accepted')
+    // Query to get friend list (status = 'accepted')
     char query[1024];
     snprintf(query, sizeof(query),
             "SELECT DISTINCT "
@@ -643,7 +643,7 @@ void handle_friend_list(Server *server, ClientSession *client) {  // BỎ Parsed
         return;
     }
     
-    // Tạo response dạng bảng
+    // Create response in table format
     char friend_list[BUFFER_SIZE];
     int offset = 0;
     
@@ -660,7 +660,7 @@ void handle_friend_list(Server *server, ClientSession *client) {  // BỎ Parsed
         const char *username = PQgetvalue(res, i, 0);
         const char *is_online_str = PQgetvalue(res, i, 1);
         
-        // Chuyển đổi is_online
+        // Convert is_online
         const char *status = "Offline";
         if (is_online_str && (is_online_str[0] == 't' || is_online_str[0] == '1')) {
             status = "Online";

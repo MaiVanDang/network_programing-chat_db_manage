@@ -324,6 +324,11 @@ void handle_logout_command(Server *server, ClientSession *client, ParsedCommand 
     
     if (!check_auth(client)) return;
     
+    // Notify chat partner if user was in active conversation
+    if (strlen(client->current_chat_partner) > 0) {
+        notify_partner_offline(server, client->username);
+    }
+    
     update_user_status(server->db_conn, client->user_id, 0);
     
     printf("User logged out: %s (id=%d, fd=%d)\n", 
@@ -335,6 +340,7 @@ void handle_logout_command(Server *server, ClientSession *client, ParsedCommand 
     client->user_id = -1;
     client->is_authenticated = 0;
     memset(client->username, 0, MAX_USERNAME_LENGTH);
+    memset(client->current_chat_partner, 0, MAX_USERNAME_LENGTH);
     
     char msg[128];
     snprintf(msg, sizeof(msg), "Goodbye %s", username_copy);

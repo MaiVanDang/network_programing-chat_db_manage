@@ -379,6 +379,7 @@ ClientSession* client_session_create(int socket_fd) {
     session->client_ip[0] = '\0';
     session->recv_buffer = stream_buffer_create();
     session->last_activity = time(NULL);
+    memset(session->current_chat_partner, 0, MAX_USERNAME_LENGTH);
     
     if (!session->recv_buffer) {
         free(session);
@@ -457,6 +458,11 @@ void server_remove_client(Server *server, int socket_fd) {
             ClientSession *client = server->clients[i];
             
             if (client->is_authenticated && client->user_id > 0) {
+                // Notify chat partner if user was in active conversation
+                if (strlen(client->current_chat_partner) > 0) {
+                    notify_partner_offline(server, client->username);
+                }
+                
                 char query[256];
                 snprintf(query, sizeof(query),
                         "UPDATE users SET is_online = FALSE WHERE id = %d",
@@ -494,6 +500,42 @@ ClientSession* server_get_client_by_fd(Server *server, int socket_fd) {
     }
     
     return NULL;
+}
+
+/**
+ * @function notify_partner_offline: Notify chat partner when user goes offline
+ * 
+ * @param server Pointer to the Server instance
+ * @param offline_username Username of the user who went offline
+ * 
+ * @return void
+ */
+void notify_partner_offline(Server *server, const char *offline_username) {
+    if (!server || !offline_username) return;
+    
+    // Find all clients who were chatting with the offline user
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        ClientSession *client = server->clients[i];
+        if (client && client->is_authenticated) {
+            // Check if this client was chatting with the offline user
+            if (strcmp(client->current_chat_partner, offline_username) == 0) {
+                char notification[512];
+                snprintf(notification, sizeof(notification),
+                        "OFFLINE_NOTIFICATION user=\"%s\" message=\"%s has gone offline\"",
+                        offline_username, offline_username);
+                
+                char *notify_msg = build_response(STATUS_OFFLINE_NOTIFICATION, notification);
+                server_send_response(client, notify_msg);
+                free(notify_msg);
+                
+                printf("Sent offline notification to %s about %s\n", 
+                       client->username, offline_username);
+                
+                // Clear their chat partner since conversation ended
+                memset(client->current_chat_partner, 0, MAX_USERNAME_LENGTH);
+            }
+        }
+    }
 }
 
 /**

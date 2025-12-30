@@ -860,15 +860,15 @@ int handle_friend_req(ClientConn *client) {
         return 1;
     }
     
-    // Tạo message theo protocol: FRIEND_REQ <username>
+    // Create message according to protocol: FRIEND_REQ <username>
     char message[BUFFER_SIZE];
     snprintf(message, BUFFER_SIZE, "FRIEND_REQ %s", username);
     
-    // Gửi message đến server
+    // Send message to server
     send_message(client, message);
     printf("Sending friend request to %s...\n", username);
     
-    // Nhận response từ server
+    // Receive response from server
     int result = handle_server_response(client);
     
     free(username);
@@ -902,15 +902,15 @@ int handle_friend_accept(ClientConn *client) {
     char *trimmed = username;
     while (*trimmed == ' ' || *trimmed == '\t') trimmed++;
     
-    // Tạo message theo protocol: FRIEND_ACCEPT <username>
+    // Create message according to protocol: FRIEND_ACCEPT <username>
     char message[BUFFER_SIZE];
     snprintf(message, BUFFER_SIZE, "FRIEND_ACCEPT %s", trimmed);
     
-    // Gửi message đến server
+    // Send message to server
     send_message(client, message);
     printf("Accepting friend request from %s...\n", trimmed);
     
-    // Nhận response từ server
+    // Receive response from server
     int result = handle_server_response(client);
     
     free(username);
@@ -944,15 +944,15 @@ int handle_friend_decline(ClientConn *client) {
     char *trimmed = username;
     while (*trimmed == ' ' || *trimmed == '\t') trimmed++;
     
-    // Tạo message theo protocol: FRIEND_DECLINE <username>
+    // Create message according to protocol: FRIEND_DECLINE <username>
     char message[BUFFER_SIZE];
     snprintf(message, BUFFER_SIZE, "FRIEND_DECLINE %s", trimmed);
     
-    // Gửi message đến server
+    // Send message to server
     send_message(client, message);
     printf("Declining friend request from %s...\n", trimmed);
     
-    // Nhận response từ server
+    // Receive response from server
     int result = handle_server_response(client);
     
     free(username);
@@ -969,13 +969,13 @@ int handle_friend_decline(ClientConn *client) {
 int handle_friend_remove(ClientConn *client) {
     printf("\n--- REMOVE FRIEND ---\n");
 
-    // Hiển thị danh sách bạn bè trước
+    // Display friend list first
     printf("\nFetching your friend list...\n");
     send_message(client, "FRIEND_LIST");
     handle_server_response(client);
     printf("\n");
     
-    // Nhập username muốn hủy kết bạn
+    // Enter username to unfriend
     printf("Enter username to remove from friend list (or press Enter to cancel): ");
     
     char *username = read_line();
@@ -989,7 +989,7 @@ int handle_friend_remove(ClientConn *client) {
     char *trimmed = username;
     while (*trimmed == ' ' || *trimmed == '\t') trimmed++;
     
-    // Xác nhận
+    // Confirmation
     printf("\nWARNING: Are you sure you want to remove '%s' from your friend list? (y/n): ", trimmed);
     char confirm[10];
     if (fgets(confirm, sizeof(confirm), stdin)) {
@@ -1000,15 +1000,15 @@ int handle_friend_remove(ClientConn *client) {
         }
     }
     
-    // Tạo message theo protocol: FRIEND_REMOVE <username>
+    // Create message according to protocol: FRIEND_REMOVE <username>
     char message[BUFFER_SIZE];
     snprintf(message, BUFFER_SIZE, "FRIEND_REMOVE %s", trimmed);
     
-    // Gửi message đến server
+    // Send message to server
     send_message(client, message);
     printf("Removing friend %s...\n", trimmed);
     
-    // Nhận response từ server
+    // Receive response from server
     int result = handle_server_response(client);
     
     free(username);
@@ -1025,11 +1025,11 @@ int handle_friend_remove(ClientConn *client) {
 int handle_friend_list(ClientConn *client) {
     printf("\n--- MY FRIEND LIST ---\n");
     
-    // Gửi command đến server
+    // Send command to server
     send_message(client, "FRIEND_LIST");
     printf("Fetching friend list...\n");
     
-    // Nhận và hiển thị danh sách
+    // Receive and display list
     int result = handle_server_response(client);
     
     printf("\nPress Enter to continue...");

@@ -1283,7 +1283,7 @@ void broadcast_group_message(Server *server, int group_id, const char *group_nam
         
         ClientSession *member = server_get_client_by_username(server, member_username);
         
-        // Chỉ gửi real-time nếu user đang online VÀ đang trong chế độ messaging
+        // Only send real-time if user is online AND in messaging mode
         if (member && member->is_authenticated && 
             is_user_in_group_messaging(server->db_conn, member_id, group_id)) {
             
