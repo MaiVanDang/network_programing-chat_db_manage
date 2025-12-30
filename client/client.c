@@ -280,6 +280,69 @@ void display_group_join_result_notification(const char *message, int approved) {
 }
 
 /**
+ * @function display_new_message_notification: Display new message notification.
+ * 
+ * @param message The notification message.
+ * 
+ * @return void
+ */
+void display_new_message_notification(const char *message) {
+    // Parse: "NEW_MESSAGE from <sender>: <content>"
+    const char *from_marker = strstr(message, "from ");
+    if (!from_marker) return;
+    
+    from_marker += 5; // Skip "from "
+    const char *colon = strstr(from_marker, ": ");
+    if (!colon) return;
+    
+    char sender[64] = {0};
+    int sender_len = colon - from_marker;
+    if (sender_len > 0 && sender_len < 64) {
+        strncpy(sender, from_marker, sender_len);
+    }
+    
+    const char *msg_content = colon + 2;
+    
+    printf("\n\033[95m--- NEW MESSAGE ---\033[0m\n");
+    printf("From: \033[36m%s\033[0m\n", sender);
+    printf("Message: %s\n", msg_content);
+}
+
+/**
+ * @function display_friend_request_notification: Display friend request notification.
+ * 
+ * @param message The notification message.
+ * 
+ * @return void
+ */
+void display_friend_request_notification(const char *message) {
+    char from_user[64] = {0};
+    
+    parse_notification_field(message, "from_user", from_user, sizeof(from_user));
+    
+    printf("\n\033[96m--- NEW FRIEND REQUEST ---\033[0m\n");
+    printf("From: \033[33m%s\033[0m\n", from_user);
+
+}
+
+/**
+ * @function display_friend_accept_notification: Display friend accept notification.
+ * 
+ * @param message The notification message.
+ * 
+ * @return void
+ */
+void display_friend_accept_notification(const char *message) {
+    char accepter_user[64] = {0};
+    
+    parse_notification_field(message, "accepter_user", accepter_user, sizeof(accepter_user));
+    
+    printf("\n\033[92m--- FRIEND REQUEST ACCEPTED ---\033[0m\n");
+    printf("\033[33m%s\033[0m accepted your friend request!\n", accepter_user);
+
+}
+
+/**
  * @function check_server_messages: Check and process incoming server messages.
  * 
  * @param client Pointer to ClientConn structure.
@@ -651,69 +714,6 @@ void display_group_kick_notification(const char *message) {
     printf("- ID: %d\n", group_id);
     printf("- Kicked by: %s\n", kicked_by);
     printf("\n");
-}
-
-/**
- * @function display_new_message_notification: Display new message notification.
- * 
- * @param message The notification message.
- * 
- * @return void
- */
-void display_new_message_notification(const char *message) {
-    // Parse: "NEW_MESSAGE from <sender>: <content>"
-    const char *from_marker = strstr(message, "from ");
-    if (!from_marker) return;
-    
-    from_marker += 5; // Skip "from "
-    const char *colon = strstr(from_marker, ": ");
-    if (!colon) return;
-    
-    char sender[64] = {0};
-    int sender_len = colon - from_marker;
-    if (sender_len > 0 && sender_len < 64) {
-        strncpy(sender, from_marker, sender_len);
-    }
-    
-    const char *msg_content = colon + 2;
-    
-    printf("\n\033[95m--- NEW MESSAGE ---\033[0m\n");
-    printf("From: \033[36m%s\033[0m\n", sender);
-    printf("Message: %s\n", msg_content);
-}
-
-/**
- * @function display_friend_request_notification: Display friend request notification.
- * 
- * @param message The notification message.
- * 
- * @return void
- */
-void display_friend_request_notification(const char *message) {
-    char from_user[64] = {0};
-    
-    parse_notification_field(message, "from_user", from_user, sizeof(from_user));
-    
-    printf("\n\033[96m--- NEW FRIEND REQUEST ---\033[0m\n");
-    printf("From: \033[33m%s\033[0m\n", from_user);
-
-}
-
-/**
- * @function display_friend_accept_notification: Display friend accept notification.
- * 
- * @param message The notification message.
- * 
- * @return void
- */
-void display_friend_accept_notification(const char *message) {
-    char accepter_user[64] = {0};
-    
-    parse_notification_field(message, "accepter_user", accepter_user, sizeof(accepter_user));
-    
-    printf("\n\033[92m--- FRIEND REQUEST ACCEPTED ---\033[0m\n");
-    printf("\033[33m%s\033[0m accepted your friend request!\n", accepter_user);
-
 }
 
 /**
@@ -1431,11 +1431,120 @@ void handle_group_msg(ClientConn *client) {
         trimmed_group++;
 
     char get_offline_cmd[BUFFER_SIZE];
-    snprintf(get_offline_cmd, sizeof(get_offline_cmd), "GROUP_SEND_OFFLINE_MSG %s", trimmed_group);
+    snprintf(get_offline_cmd, sizeof(get_offline_cmd), 
+             "GROUP_SEND_OFFLINE_MSG %s", trimmed_group);
     send_message(client, get_offline_cmd);
 
-    sleep(1);
-    check_server_messages(client);
+    fd_set validation_fds;
+    struct timeval validation_timeout; 
+    int validation_failed = 0;
+    
+    FD_ZERO(&validation_fds);
+    FD_SET(client->sockfd, &validation_fds);
+    validation_timeout.tv_sec = 2;
+    validation_timeout.tv_usec = 0;
+    
+    int activity = select(client->sockfd + 1, &validation_fds, NULL, NULL, &validation_timeout);
+    
+    if (activity > 0 && FD_ISSET(client->sockfd, &validation_fds)) {
+        char buffer[BUFFER_SIZE];
+        int bytes_received = recv(client->sockfd, buffer, sizeof(buffer) - 1, 0);
+        
+        if (bytes_received > 0) {
+            buffer[bytes_received] = '\0';
+            
+            if (!stream_buffer_append(client->recv_buffer, buffer, bytes_received)) {
+                fprintf(stderr, "Buffer overflow\n");
+                free(group_name);
+                return;
+            }
+            
+            char *message;
+            while ((message = stream_buffer_extract_message(client->recv_buffer)) != NULL) {
+                if (strstr(message, "421")) {
+                    printf("\r\033[K");
+                    printf("\nWarring: You are not a member of group '%s'\n", trimmed_group);
+                    
+                    char *msg_line = strchr(message, '\n');
+                    if (msg_line) {
+                        printf("%s\n", msg_line + 1);
+                    }
+                    
+                    validation_failed = 1;
+                    free(message);
+                    break;
+                }
+                else if( strstr(message, "305")) {
+                    printf("\r\033[K");
+                    printf("\nWarring: You must login first\n");
+                    
+                    char *msg_line = strchr(message, '\n');
+                    if (msg_line) {
+                        printf("%s\n", msg_line + 1);
+                    }
+                    
+                    validation_failed = 1;
+                    free(message);
+                    break;
+                }
+                else if( strstr(message, "419")) {
+                    printf("\r\033[K");
+                    printf("\nERROR: Group '%s' does not exist\n", trimmed_group);
+                    
+                    char *msg_line = strchr(message, '\n');
+                    if (msg_line) {
+                        printf("%s\n", msg_line + 1);
+                    }
+                    
+                    validation_failed = 1;
+                    free(message);
+                    break;
+                }
+                else if( strstr(message, "501") || strstr(message, "502")) {
+                    
+                    printf("\r\033[K");
+                    printf("\nERROR: Cannot access group '%s'\n", trimmed_group);
+                    
+                    char *msg_line = strchr(message, '\n');
+                    if (msg_line) {
+                        printf("%s\n", msg_line + 1);
+                    }
+                    
+                    validation_failed = 1;
+                    free(message);
+                    break;
+                }
+                else if (strstr(message, "118") || strstr(message, "420")) {
+                    if (strstr(message, "118")) {
+                        char *msg_copy = strdup(message);
+                        char *line = strtok(msg_copy, "\n");
+                        line = strtok(NULL, "\n");
+                        
+                        printf("\n");
+                        while (line != NULL) {
+                            printf("%s\n", line);
+                            line = strtok(NULL, "\n");
+                        }
+                        free(msg_copy);
+                    }
+                }
+                
+                free(message);
+            }
+        }
+    } else if (activity == 0) {
+        printf("\nNo response from server. Cannot verify group membership.\n");
+        validation_failed = 1;
+    } else {
+        perror("select() error");
+        validation_failed = 1;
+    }
+    
+    if (validation_failed) {
+        printf("Returning to menu...\n");
+        free(group_name);
+        return;
+    }
 
     printf("\n--- Chatting in group: %s ---\n", trimmed_group);
     printf("--- Type 'exit' to leave chat ---\n\n");
@@ -1443,7 +1552,7 @@ void handle_group_msg(ClientConn *client) {
     printf("[\033[32mYou\033[0m]: ");
     fflush(stdout);
     
-    fd_set read_fds;
+    fd_set read_fds; 
     struct timeval timeout;
     char input_buffer[MAX_MESSAGE_LENGTH];
     int should_exit = 0;
